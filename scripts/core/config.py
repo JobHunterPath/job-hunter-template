@@ -75,7 +75,7 @@ def get_secret(env_var: str, required: bool = True) -> str:
         if not required:
             return ""
         raise RuntimeError(
-            f"keyring unavailable: {e}. Install with: pip install keyring"
+            f"keyring unavailable: {e}. Install with: python -m pip install keyring"
         ) from e
 
     if not required:

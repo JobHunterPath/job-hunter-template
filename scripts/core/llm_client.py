@@ -43,21 +43,21 @@ class LLMClient:
             try:
                 from anthropic import Anthropic
             except ImportError:
-                raise ImportError("pip install anthropic")
+                raise ImportError("python -m pip install anthropic")
             return Anthropic(api_key=api_key)
 
         if provider == "openai":
             try:
                 from openai import OpenAI
             except ImportError:
-                raise ImportError("pip install openai")
+                raise ImportError("python -m pip install openai")
             return OpenAI(api_key=api_key)
 
         if provider == "google":
             try:
                 import google.generativeai as genai
             except ImportError:
-                raise ImportError("pip install google-generativeai")
+                raise ImportError("python -m pip install google-generativeai")
             genai.configure(api_key=api_key)
             return genai
 
@@ -65,7 +65,7 @@ class LLMClient:
             try:
                 from openai import OpenAI
             except ImportError:
-                raise ImportError("pip install openai  # Ollama uses the OpenAI-compatible API")
+                raise ImportError("python -m pip install openai  # Ollama uses the OpenAI-compatible API")
             # Ollama exposes an OpenAI-compatible endpoint; api_key is ignored server-side
             return OpenAI(
                 base_url=base_url or "http://localhost:11434/v1",

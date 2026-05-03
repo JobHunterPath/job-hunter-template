@@ -3,7 +3,7 @@ name: Tailor Links
 # Manual-only — triggered from the GitHub Actions UI.
 # Enter up to 5 job URLs (URL 1 is required, URLs 2–5 are optional).
 # The pipeline fetches each JD, tailors the resume, generates a cover letter,
-# compiles PDFs, and registers each company in companies.yml.
+# compiles PDFs, and registers each company in search_config.yml regions.
 
 on:
   workflow_dispatch:
@@ -136,7 +136,7 @@ jobs:
         run: |
           git config user.name "job-hunt-bot"
           git config user.email "bot@job-hunt"
-          git add jobs/ README.md config/applied_jobs.yml config/companies.yml
+          git add jobs/ README.md config/applied_jobs.yml config/search_config.yml
           git diff --staged --quiet || git commit -m "tailor: $(date +%Y-%m-%d)"
           git pull --rebase origin main
           git push

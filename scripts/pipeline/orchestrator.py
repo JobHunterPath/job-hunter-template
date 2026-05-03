@@ -8,7 +8,7 @@ Two modes, one entry point:
 
   tailor-links     Tailor resume for a specific list of URLs.
                    Pass --links "URL1, URL2" or set TAILOR_LINKS env var.
-                   Discovered companies are registered to companies.yml.
+                   Discovered companies are registered to search_config.yml regions.
 
 Usage:
   python scripts/pipeline/orchestrator.py
@@ -131,7 +131,7 @@ def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:
     Fetch job descriptions from a list of direct URLs.
 
     Skips URLs already in applied_jobs.yml unless --force is set.
-    Registers each new company to companies.yml and search_config.yml for future hunt runs.
+    Registers each new company to search_config.yml regions for future hunt runs.
     """
     jobs = []
     for url in _parse_urls(raw):
@@ -174,8 +174,7 @@ def _extract_career_url(job_url: str) -> str | None:
 
 def _register_company(job: dict) -> None:
     """
-    Add the job's company to companies.yml (discover deduplication) and to
-    search_config.yml berlin region so the daily hunt scraper picks it up.
+    Add the job's company to search_config.yml regions so the daily hunt scraper picks it up.
     """
     career_url = _extract_career_url(job.get("url", ""))
     if not career_url:
@@ -184,58 +183,34 @@ def _register_company(job: dict) -> None:
 
     company_name = job["company"]
 
-    # ── companies.yml (discover deduplication) ─────────────────────────────────
-    companies_path = Path(ROOT) / "config" / "companies.yml"
-    try:
-        data = yaml.safe_load(companies_path.read_text(encoding="utf-8")) or {}
-    except FileNotFoundError:
-        data = {}
-
-    companies: list[dict] = data.get("companies", [])
-    existing_urls = {c.get("career_url", "").lower() for c in companies}
-
-    if career_url.lower() not in existing_urls:
-        companies.append({"name": company_name, "career_url": career_url})
-        data["companies"] = companies
-        header = (
-            "# Source of truth for all tracked companies.\n"
-            "# Auto-discovery appends here weekly.\n"
-            "# tailor-links mode also appends here on each new company.\n\n"
-        )
-        companies_path.write_text(
-            header + yaml.dump(data, default_flow_style=False, allow_unicode=True),
-            encoding="utf-8",
-        )
-        logger.info(f"[register] Added {company_name} ({career_url}) → companies.yml")
-    else:
-        logger.debug(f"[register] {company_name} already in companies.yml")
-
     # ── search_config.yml (daily hunt scraper) ─────────────────────────────────
     search_cfg_path = Path(ROOT) / "config" / "search_config.yml"
     try:
-        sc_text = search_cfg_path.read_text(encoding="utf-8")
+        sc_data = yaml.safe_load(search_cfg_path.read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         logger.warning("[register] search_config.yml not found — skipping scraper registration")
         return
 
-    if company_name in sc_text or career_url in sc_text:
-        logger.debug(f"[register] {company_name} already in search_config.yml")
-        return
+    regions = sc_data.get("regions", {})
+    added_to = []
+    for region_name, region_config in regions.items():
+        if not region_config.get("enabled", True):
+            continue
+        companies = region_config.get("companies", [])
+        existing_names = {c.get("name", "").lower() for c in companies}
+        if company_name.lower() not in existing_names:
+            companies.append({"name": company_name, "career_url": career_url})
+            region_config["companies"] = companies
+            added_to.append(region_name)
 
-    # Append after the last company block (6-space indent) to preserve all
-    # comments and structure in the file.
-    new_entry = f"      - name: {company_name}\n        career_url: {career_url}\n"
-    last_end = None
-    for m in re.finditer(r"      - name: .+\n        career_url: [^\n]+\n", sc_text):
-        last_end = m.end()
-
-    if last_end is None:
-        logger.warning("[register] Cannot locate company list in search_config.yml — skipping")
-        return
-
-    sc_text = sc_text[:last_end] + new_entry + sc_text[last_end:]
-    search_cfg_path.write_text(sc_text, encoding="utf-8")
-    logger.info(f"[register] Added {company_name} ({career_url}) → search_config.yml (berlin)")
+    if added_to:
+        search_cfg_path.write_text(
+            yaml.dump(sc_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+        logger.info(f"[register] Added {company_name} ({career_url}) → search_config.yml regions: {', '.join(added_to)}")
+    else:
+        logger.debug(f"[register] {company_name} already in all enabled regions")
 
 
 # ── Snippet enrichment ────────────────────────────────────────────────────────

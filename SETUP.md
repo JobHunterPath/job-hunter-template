@@ -102,7 +102,7 @@ In the VS Code terminal, run:
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 playwright install chromium
 ```
 
@@ -301,11 +301,15 @@ Replace `Candidate Name` with your name.
 
 Open `config/search_config.yml`.
 
-Update:
+The search config uses regions to define locations. Each region represents a city or area with its own set of companies.
 
-- `location`: your target city or region.
+### Basic Configuration
+
+For a single location, update the `berlin` region:
+
+- `location`: your target city or region (e.g., "Berlin", "Munich").
 - `country`: your target country code, such as `DE`, `GB`, or `US`.
-- `job_titles`: the roles you want.
+- `job_titles`: the roles you want (e.g., "Product Manager", "Product Owner").
 - `companies`: companies you want the automation to check.
 - `excluded_companies`: companies you never want to process.
 
@@ -322,6 +326,38 @@ Common career URL formats:
 - `jobs.lever.co/companyname`
 - `jobs.smartrecruiters.com/companyname`
 - `careers.companyname.com`
+
+### Adding Multiple Locations
+
+To search in multiple cities or regions:
+
+1. Copy the entire `berlin` region block.
+2. Paste it below and change the region name (e.g., `munich`, `hamburg`, `london`).
+3. Set `enabled: true` to activate the new region.
+4. Update `location`, `country`, `search_lang`, and `description` for the new area.
+5. Replace the `companies` list with companies specific to that location.
+6. Companies from all enabled regions will be scraped daily.
+
+Example for adding Munich:
+
+```yaml
+regions:
+  berlin:
+    # ... existing berlin config ...
+
+  munich:
+    enabled: true
+    country: "DE"
+    search_lang: "en"
+    location: "Munich"
+    description: "Munich tech companies"
+    companies:
+      - name: Example Munich Company
+        career_url: boards.greenhouse.io/examplemunich
+      # Add more Munich companies...
+```
+
+You can have as many regions as needed. Disable regions by setting `enabled: false`.
 
 ## 14. Set Your Scoring Rules
 
@@ -403,7 +439,7 @@ llm:
 Install the OpenAI Python package:
 
 ```bash
-pip install openai
+python -m pip install openai
 ```
 
 ### Option C: Google Gemini
@@ -438,7 +474,7 @@ llm:
 Install the Google package:
 
 ```bash
-pip install google-generativeai
+python -m pip install google-generativeai
 ```
 
 ### Option D: Local LLM With Ollama
@@ -496,7 +532,7 @@ Install the OpenAI Python package because Ollama uses an OpenAI-compatible API
 inside this project:
 
 ```bash
-pip install openai
+python -m pip install openai
 ```
 
 Keep Ollama running whenever you run the automation locally.
