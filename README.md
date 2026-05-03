@@ -47,6 +47,9 @@ Generated application files are written to:
 jobs/YYYY-MM-DD_company_role/
 ```
 
+The template includes an empty `jobs/` folder so GitHub Actions can write and
+commit generated outputs on the first run.
+
 The tracker in `config/applied_jobs.yml` prevents duplicate processing.
 
 ## Applied Jobs
