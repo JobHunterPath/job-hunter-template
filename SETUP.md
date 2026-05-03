@@ -7,7 +7,7 @@ VS Code, Docker, and LaTeX.
 
 This repository can search for jobs, score them against your profile, tailor a
 LaTeX resume, write cover letters from your story bank, and save the outputs in
-`jobs/`.
+`jobs/`. The template includes this folder empty at first.
 
 Before running the automation, you will set up your computer, create your own
 private copy of the template, edit the resume and config files, test locally,
@@ -723,6 +723,9 @@ The secret names must match `config/api_config.yml`.
 6. Click **Run workflow**.
 
 When the run finishes, check the `jobs/` folder in your repository.
+
+The folder starts empty except for `.gitkeep`; each successful run adds one
+subfolder per processed job.
 
 For scheduled daily search, use the **Job Hunt Pipeline** workflow. Run it
 manually once before relying on the schedule.

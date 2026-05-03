@@ -136,15 +136,7 @@ jobs:
         run: |
           git config user.name "job-hunt-bot"
           git config user.email "bot@job-hunt"
-          git add README.md config/applied_jobs.yml config/search_config.yml
-          find jobs -maxdepth 2 -type f \( \
-            -name meta.json -o \
-            -name jd.md -o \
-            -name cover_letter.md -o \
-            -name cover_letter.pdf -o \
-            -name resume_tailored.tex -o \
-            -name resume_tailored.pdf \
-          \) -print0 | xargs -0 -r git add -f --
+          git add jobs/ README.md config/applied_jobs.yml config/search_config.yml
           git diff --staged --quiet || git commit -m "tailor: $(date +%Y-%m-%d)"
           git pull --rebase origin main
           git push
