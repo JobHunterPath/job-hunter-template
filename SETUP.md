@@ -211,9 +211,85 @@ Inside you may see:
 
 Always review the resume and cover letter before applying.
 
-## Optional: Run Locally On Your Computer
+## 11. Set Up Your Computer
 
-This section is only for people comfortable using a terminal.
+Set up your computer before relying on automation. This lets you edit files in
+VS Code, preview LaTeX resumes, run tests locally, and catch basic setup issues
+before GitHub Actions spends API credits.
+
+### A. Install The Required Apps
+
+Install these first:
+
+1. **Git** from `https://git-scm.com/downloads`
+2. **Visual Studio Code** from `https://code.visualstudio.com/`
+3. **Python** from `https://www.python.org/downloads/`
+4. **Docker Desktop** from `https://www.docker.com/products/docker-desktop/`
+
+After installing Docker Desktop, open it once and wait until it says the Docker
+engine is running.
+
+### B. Set Up Git Name And Email
+
+Git needs your name and email so your commits are labeled correctly.
+
+Open VS Code, then open the terminal:
+
+```text
+Terminal -> New Terminal
+```
+
+Run these commands, replacing the example values:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
+Check that it worked:
+
+```bash
+git config --global --list
+```
+
+GitHub does not accept account passwords for Git pushes. The easiest option is
+to sign in through VS Code when prompted. If GitHub asks for a password in the
+terminal, use a GitHub personal access token instead of your GitHub password.
+
+### C. Clone Your GitHub Repository In VS Code
+
+The easiest way:
+
+1. Open VS Code.
+2. Click **Source Control** in the left sidebar.
+3. Click **Clone Repository**.
+4. Paste your repository URL from GitHub.
+5. Choose a folder on your computer.
+6. Click **Open** when VS Code asks if you want to open the cloned repository.
+
+Alternative terminal command:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+cd YOUR_REPOSITORY
+code .
+```
+
+### D. Install Recommended VS Code Extensions
+
+In VS Code, open **Extensions** and install:
+
+- **Python** by Microsoft
+- **Pylance** by Microsoft
+- **YAML** by Red Hat
+- **LaTeX Workshop** by James Yu
+- **Docker** by Microsoft
+- **GitHub Pull Requests and Issues** by GitHub
+
+These make it easier to edit Python, YAML configs, LaTeX resumes, Docker setup,
+and GitHub pull requests.
+
+### E. Create The Python Environment
 
 Install dependencies:
 
@@ -230,6 +306,73 @@ On macOS/Linux, activate with:
 source .venv/bin/activate
 ```
 
+If VS Code asks which Python interpreter to use, choose the one inside `.venv`.
+
+### F. Check Docker Works
+
+Run:
+
+```bash
+docker --version
+```
+
+Then test the LaTeX Docker image:
+
+```bash
+docker run --rm texlive/texlive:latest pdflatex --version
+```
+
+The first run can take a while because Docker downloads the TeX Live image.
+
+### G. Add VS Code LaTeX Build Settings
+
+Create a folder named `.vscode` in the repository root if it does not exist.
+Inside it, create a file named `settings.json`.
+
+Paste this:
+
+```json
+{
+  "latex-workshop.latex.outDir": "%DIR%",
+  "latex-workshop.latex.tools": [
+    {
+      "name": "pdflatex-docker",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-v",
+        "%DIR%:/work",
+        "-w",
+        "/work",
+        "texlive/texlive:latest",
+        "pdflatex",
+        "-interaction=nonstopmode",
+        "-synctex=1",
+        "%DOCFILE%.tex"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "Build with Docker pdflatex",
+      "tools": ["pdflatex-docker"]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "Build with Docker pdflatex"
+}
+```
+
+To build a resume PDF in VS Code:
+
+1. Open `resume_double_column.tex` or `resume_single_column.tex`.
+2. Open the Command Palette with `Ctrl+Shift+P`.
+3. Run **LaTeX Workshop: Build LaTeX project**.
+
+If Docker is not running, start Docker Desktop and try again.
+
+### H. Run The Automation Locally
+
 Run direct job links:
 
 ```bash
@@ -241,6 +384,202 @@ Run the daily hunt locally:
 ```bash
 PYTHONPATH=scripts python scripts/pipeline/orchestrator.py
 ```
+
+Run tests:
+
+```bash
+python -m pytest -q
+```
+
+## 12. Getting Future Template Updates
+
+Updates from the original template are not automatic in repositories created
+with **Use this template**. This is intentional: your resume, story bank, and
+configs are personal, so updates should not overwrite them without your review.
+
+Use the steps below whenever you want to pull improvements from the shared
+template into your own private repo.
+
+### A. Open Your Repo In VS Code
+
+1. Open VS Code.
+2. Open your cloned repository folder.
+3. Open a terminal:
+
+```text
+Terminal -> New Terminal
+```
+
+### B. Check Your Current Branch
+
+Run:
+
+```bash
+git branch
+```
+
+The branch with `*` is your current branch. Most repositories use `main`.
+Some older repositories use `master`.
+
+The examples below use `main`. If your branch is `master`, replace `main` with
+`master` in the commands.
+
+### C. Add The Template Repo As Upstream
+
+You only need to do this once.
+
+```bash
+git remote add upstream https://github.com/Job-Network-Projects/job-hunter-template.git
+git remote -v
+```
+
+You should see both:
+
+```text
+origin    your private repo
+upstream  the shared template repo
+```
+
+If Git says `remote upstream already exists`, that is fine. Continue to the
+next step.
+
+### D. Save Your Current Work First
+
+Before pulling template updates, save your own changes:
+
+```bash
+git status
+git add .
+git commit -m "save my local changes"
+```
+
+If Git says `nothing to commit`, that is fine.
+
+### E. Create A Backup Branch
+
+This gives you an easy way back if anything goes wrong:
+
+```bash
+git checkout -b backup-before-template-update
+git checkout main
+```
+
+Again, use `master` instead of `main` if your repo uses `master`.
+
+### F. Pull And Merge Template Updates
+
+Run:
+
+```bash
+git fetch upstream
+git checkout main
+git merge upstream/main
+```
+
+If there are no conflicts, Git will complete the merge automatically.
+
+Then push the updated repo back to GitHub:
+
+```bash
+git push origin main
+```
+
+If your branch is `master`, use:
+
+```bash
+git checkout master
+git merge upstream/master
+git push origin master
+```
+
+### G. If Git Reports Merge Conflicts
+
+Merge conflicts mean both you and the template changed the same part of a file.
+This is normal for files like configs, resumes, and documentation.
+
+In VS Code:
+
+1. Open the **Source Control** panel.
+2. Click each file listed under **Merge Changes**.
+3. VS Code will show buttons such as:
+   - **Accept Current Change**: keep your version.
+   - **Accept Incoming Change**: use the template version.
+   - **Accept Both Changes**: keep both and edit manually.
+4. Save the file after choosing.
+5. Repeat for every conflicted file.
+
+After all conflicts are fixed:
+
+```bash
+git add .
+git commit -m "merge template updates"
+git push origin main
+```
+
+Use `master` instead of `main` if needed.
+
+### H. If You Want To Cancel A Bad Merge
+
+If the merge feels wrong and you have not committed it yet, run:
+
+```bash
+git merge --abort
+```
+
+You can also go back to your backup branch:
+
+```bash
+git checkout backup-before-template-update
+```
+
+### What Usually Merges Cleanly
+
+Updates to reusable automation code usually merge cleanly:
+
+- `scripts/`
+- `tests/`
+- `.github/workflows/`
+- `requirements.txt`
+- documentation
+
+### Files You Should Review Carefully
+
+These files often contain your personal setup, so Git may show conflicts if both
+you and the template changed them:
+
+- `config/*.yml`
+- `resume_double_column.tex`
+- `resume_single_column.tex`
+- `resume.tex`
+- `story_bank.md`
+- `README.md`
+- `SETUP.md`
+
+### How Merge Conflicts Work
+
+If Git cannot combine changes automatically, it marks the file with conflict
+blocks:
+
+```text
+<<<<<<< HEAD
+your version
+=======
+template version
+>>>>>>> upstream/main
+```
+
+Open the file in VS Code, choose which parts to keep, remove the conflict
+markers, then save the file.
+
+After resolving conflicts:
+
+```bash
+git add .
+git commit -m "merge template updates"
+```
+
+If you are unsure, keep your personal resume, story bank, and config values, and
+copy only the useful new comments or options from the template.
 
 ## Common Problems
 
