@@ -141,11 +141,11 @@ jobs:
           path: job_hunt.log
           retention-days: 30
 
-      - name: Commit updated companies.yml
+      - name: Commit updated search_config.yml
         run: |
           git config user.name "job-hunt-bot"
           git config user.email "bot@job-hunt"
-          git add config/companies.yml
+          git add config/search_config.yml
           git diff --staged --quiet || git commit -m "discover: $(date +%Y-%m-%d) added new companies"
           git pull --rebase origin main
           git push

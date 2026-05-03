@@ -8,7 +8,7 @@ Extracts the job title, company name, and description text using a staged pipeli
   3. An LLM parses the resulting text into structured fields.
 
 Playwright is optional — install it only when needed:
-  pip install playwright && playwright install chromium
+  python -m pip install playwright && playwright install chromium
 """
 
 import json

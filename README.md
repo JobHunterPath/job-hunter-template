@@ -1,6 +1,6 @@
 # Job Hunt Automation Template
 
-This repository automates job discovery, fit scoring, resume tailoring, cover
+This repository automates job discovery across multiple locations, fit scoring, resume tailoring, cover
 letter generation, and PDF output for a configurable job search.
 
 ## Start Here
@@ -29,7 +29,7 @@ story bank, configure job search, and run the automation from GitHub.
 ## Local Run
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 PYTHONPATH=scripts python scripts/pipeline/orchestrator.py
 ```
 

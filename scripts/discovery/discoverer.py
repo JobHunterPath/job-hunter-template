@@ -1,6 +1,6 @@
 """
-Weekly job: discovers new Berlin tech companies via an LLM + Brave,
-validates their career pages exist, and appends them to companies.yml.
+Weekly job: discovers new companies via an LLM + Brave,
+validates their career pages exist, and adds them to search_config.yml regions.
 Deduplicates against existing entries automatically.
 """
 
@@ -15,7 +15,6 @@ from core.llm_client import get_llm_client
 
 # scripts/discovery/ → scripts/ → repo root
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-COMPANIES_FILE = os.path.join(ROOT, "config", "companies.yml")
 SEARCH_CONFIG_FILE = os.path.join(ROOT, "config", "search_config.yml")
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
@@ -25,7 +24,7 @@ BRAVE_HEADERS = {
     "X-Subscription-Token": BRAVE_API_KEY,
 }
 
-# ATS URL patterns and the canonical career_url format to store in companies.yml.
+# ATS URL patterns and the canonical career_url format to store in search_config.yml.
 # Order matters: more specific patterns first.
 ATS_PATTERNS = [
     (r"boards\.greenhouse\.io/([^/?#\s]+)",       "boards.greenhouse.io/{slug}"),
@@ -45,11 +44,12 @@ ATS_PATTERNS = [
 CAREER_PATH_PATTERNS = ["/careers", "/jobs", "/work-with-us", "/join-us"]
 
 # One prompt per sector — run independently so every vertical gets proper coverage.
-SECTOR_PROMPTS = [
+# Now parameterized by location.
+SECTOR_PROMPTS_TEMPLATE = [
     {
         "sector": "automotive & mobility",
         "prompt": (
-            "List 10 companies based in Berlin (or with a significant Berlin office) "
+            "List 10 companies based in {location} (or with a significant {location} office) "
             "in automotive tech, connected vehicles, EV charging, fleet management, "
             "ride-hailing software, or urban mobility platforms. Requirements:\n"
             "- English as primary working language\n"
@@ -64,7 +64,7 @@ SECTOR_PROMPTS = [
     {
         "sector": "commercial aviation & travel tech",
         "prompt": (
-            "List 10 companies based in Berlin (or with a significant Berlin office) "
+            "List 10 companies based in {location} (or with a significant {location} office) "
             "in commercial airline software, airport systems, aviation operations tech, "
             "travel booking platforms, or tourism tech. Requirements:\n"
             "- English as primary working language\n"
@@ -79,10 +79,10 @@ SECTOR_PROMPTS = [
     {
         "sector": "industrial & enterprise tech",
         "prompt": (
-            "List 10 companies based in Berlin (or with a significant Berlin office) "
+            "List 10 companies based in {location} (or with a significant {location} office) "
             "in industrial automation, manufacturing software, Industry 4.0, IIoT platforms, "
             "enterprise SaaS, B2B analytics, or supply-chain tech. "
-            "Large corporates with Berlin offices (e.g. Siemens, Bosch) are welcome. Requirements:\n"
+            "Large corporates with {location} offices (e.g. Siemens, Bosch) are welcome. Requirements:\n"
             "- English as primary working language\n"
             "- Known to hire Product Owners or Product Managers\n"
             "- NOT defence, military, weapons, banking, or gambling companies\n"
@@ -93,9 +93,9 @@ SECTOR_PROMPTS = [
         ),
     },
     {
-        "sector": "Berlin tech startups & scale-ups",
+        "sector": " {location} tech startups & scale-ups",
         "prompt": (
-            "List 10 Berlin-based tech startups or scale-ups (ideally Series A–D, founded after 2010) "
+            "List 10 {location}-based tech startups or scale-ups (ideally Series A–D, founded after 2010) "
             "in any sector EXCEPT banking/crypto-lending, gambling, defence, military, or weapons. "
             "Sectors of particular interest: fintech (non-bank), health tech, climate tech, "
             "logistics, marketplace, developer tools, SaaS. Requirements:\n"
@@ -110,47 +110,65 @@ SECTOR_PROMPTS = [
 ]
 
 
-def load_companies() -> tuple[list[dict], set[str]]:
-    with open(COMPANIES_FILE, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    companies = data.get("companies", [])
-    excluded = {e.lower() for e in data.get("excluded", [])}
+def get_sector_prompts(location: str) -> list[dict]:
+    """Generate sector prompts for a specific location."""
+    return [
+        {
+            "sector": spec["sector"].format(location=location),
+            "prompt": spec["prompt"].format(location=location, existing="{existing}")
+        }
+        for spec in SECTOR_PROMPTS_TEMPLATE
+    ]
 
-    # Also pull in names/URLs from search_config.yml so we don't
-    # re-discover companies that are already being scraped, and
-    # also honour that file's excluded_companies list.
-    if os.path.exists(SEARCH_CONFIG_FILE):
-        with open(SEARCH_CONFIG_FILE, encoding="utf-8") as f:
-            sc = yaml.safe_load(f) or {}
-        for region in sc.get("regions", {}).values():
-            for c in region.get("companies", []):
-                if not any(x["name"].lower() == c["name"].lower() for x in companies):
-                    companies.append({"name": c["name"], "career_url": c["career_url"]})
-        for name in sc.get("excluded_companies", []):
-            excluded.add(name.lower())
+
+def load_companies() -> tuple[list[dict], set[str]]:
+    with open(SEARCH_CONFIG_FILE, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    companies = []
+    excluded = {e.lower() for e in data.get("excluded_companies", [])}
+
+    # Collect all companies from all regions for deduplication purposes
+    seen = set()
+    for region in data.get("regions", {}).values():
+        for c in region.get("companies", []):
+            key = (c["name"].lower(), c["career_url"].lower())
+            if key not in seen:
+                seen.add(key)
+                companies.append({"name": c["name"], "career_url": c["career_url"]})
 
     return companies, excluded
 
 
-def save_companies(companies: list[dict], excluded: set[str]):
-    header = (
-        "# Source of truth for all tracked Berlin companies.\n"
-        "# Auto-discovery appends here weekly.\n"
-        "# You can also add/remove manually anytime.\n"
-        "# Format: name + career_url (domain or ATS path)\n\n"
-    )
-    with open(COMPANIES_FILE, "w", encoding="utf-8") as f:
-        f.write(header)
-        yaml.dump(
-            {
-                "companies": companies,
-                "excluded": sorted(list(excluded)),
-            },
-            f,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-        )
+def has_jobs_in_location(company_name: str, location: str) -> bool:
+    """Check if a company has job postings in a specific location."""
+    query = f'"{company_name}" "{location}" "Product Manager" OR "Product Owner" site:jobs OR site:careers'
+    try:
+        results = brave_search(query, count=3)
+        for result in results:
+            url = result.get("url", "").lower()
+            if company_name.lower() in url and (location.lower() in url or 'jobs' in url or 'careers' in url):
+                return True
+    except Exception as e:
+        print(f"  [check] Error checking {company_name} in {location}: {e}")
+    return False
+
+
+def add_company_to_region(search_config: dict, region_name: str, company: dict):
+    """Add a company to a region if not already present."""
+    if region_name not in search_config.get("regions", {}):
+        return
+    region = search_config["regions"][region_name]
+    companies = region.get("companies", [])
+    if not any(c["name"].lower() == company["name"].lower() for c in companies):
+        companies.append({"name": company["name"], "career_url": company["career_url"]})
+        region["companies"] = companies
+        print(f"  [auto-add] Added {company['name']} to region {region_name}")
+
+
+def save_search_config(search_config: dict):
+    """Save the updated search_config.yml."""
+    with open(SEARCH_CONFIG_FILE, "w", encoding="utf-8") as f:
+        yaml.dump(search_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
 def get_existing_names(companies: list[dict]) -> set[str]:
@@ -161,13 +179,15 @@ def get_existing_urls(companies: list[dict]) -> set[str]:
     return {c["career_url"].lower() for c in companies}
 
 
-def discover_company_names(existing: list[dict]) -> list[str]:
+def discover_company_names(existing: list[dict], location: str) -> list[str]:
     """Run one LLM query per sector and combine the results."""
     existing_names = ", ".join(c["name"] for c in existing[:60])
     seen: set[str] = set()
     all_names: list[str] = []
 
-    for spec in SECTOR_PROMPTS:
+    sector_prompts = get_sector_prompts(location)
+
+    for spec in sector_prompts:
         prompt = spec["prompt"].format(existing=existing_names)
         print(f"[discover] Querying sector: {spec['sector']}...")
         try:
@@ -208,7 +228,7 @@ def brave_search(query: str, count: int = 5) -> list[dict]:
     return resp.json().get("web", {}).get("results", [])
 
 
-def find_career_url(company_name: str, existing_urls: set[str]) -> dict | None:
+def find_career_url(company_name: str, existing_urls: set[str], location: str) -> dict | None:
     """
     Search Brave for the company's career page.
 
@@ -225,8 +245,8 @@ def find_career_url(company_name: str, existing_urls: set[str]) -> dict | None:
         "OR site:careers.hibob.com OR site:recruitee.com "
         "OR site:jobs.personio.de OR site:jobs.personio.com"
     )
-    ats_query = f'"{company_name}" Berlin {ats_sites}'
-    broad_query = f'"{company_name}" Berlin "Product Manager" OR "Product Owner" careers jobs'
+    ats_query = f'"{company_name}" {location} {ats_sites}'
+    broad_query = f'"{company_name}" {location} "Product Manager" OR "Product Owner" careers jobs'
 
     for query in (ats_query, broad_query):
         try:
@@ -272,42 +292,90 @@ def run():
     print(f"[discover] Currently tracking {len(existing)} companies")
     print(f"[discover] Excluding {len(excluded)} companies: {sorted(excluded)}")
 
-    sectors = ", ".join(s["sector"] for s in SECTOR_PROMPTS)
-    print(f"[discover] Querying LLM across {len(SECTOR_PROMPTS)} sectors: {sectors}")
-    suggested = discover_company_names(existing)
-    print(f"[discover] LLM suggested {len(suggested)} companies total: {suggested}\n")
+    # Load search_config for region info and potential updates
+    search_config = {}
+    if os.path.exists(SEARCH_CONFIG_FILE):
+        with open(SEARCH_CONFIG_FILE, encoding="utf-8") as f:
+            search_config = yaml.safe_load(f) or {}
 
-    new_names = [
-        name for name in suggested
-        if name.lower() not in existing_names
-        and name.lower() not in excluded
-    ]
+    regions = {k: v for k, v in search_config.get("regions", {}).items() if v.get("enabled", True)}
 
-    skipped_excluded = [name for name in suggested if name.lower() in excluded]
-    if skipped_excluded:
-        print(f"[discover] Excluded by exclusion list: {skipped_excluded}")
+    if not regions:
+        print("[discover] No enabled regions found in search_config.yml. Defaulting to Berlin.")
+        regions = {"berlin": {"location": "Berlin", "country": "DE"}}
+        search_config["regions"] = regions
 
-    print(f"[discover] {len(new_names)} not yet tracked: {new_names}\n")
+    all_new_entries = []
+    region_discoveries = {}  # Track which region discovered which companies
 
-    new_entries = []
-    for name in new_names:
-        print(f"[discover] Looking up: {name}")
-        entry = find_career_url(name, existing_urls)
-        if entry:
-            new_entries.append(entry)
-            existing_urls.add(entry["career_url"].lower())
+    for region_name, region_config in regions.items():
+        location = region_config.get("location", region_name.title())
+        print(f"\n[discover] Discovering companies for region: {region_name} ({location})")
 
-    if not new_entries:
+        sectors = ", ".join(s["sector"] for s in get_sector_prompts(location))
+        print(f"[discover] Querying LLM across sectors: {sectors}")
+        suggested = discover_company_names(existing, location)
+        print(f"[discover] LLM suggested {len(suggested)} companies: {suggested}\n")
+
+        new_names = [
+            name for name in suggested
+            if name.lower() not in existing_names
+            and name.lower() not in excluded
+        ]
+
+        skipped_excluded = [name for name in suggested if name.lower() in excluded]
+        if skipped_excluded:
+            print(f"[discover] Excluded by exclusion list: {skipped_excluded}")
+
+        print(f"[discover] {len(new_names)} not yet tracked: {new_names}\n")
+
+        new_entries = []
+        for name in new_names:
+            print(f"[discover] Looking up: {name}")
+            entry = find_career_url(name, existing_urls, location)
+            if entry:
+                new_entries.append(entry)
+                existing_urls.add(entry["career_url"].lower())
+                existing_names.add(entry["name"].lower())
+                region_discoveries[entry["name"].lower()] = region_name
+
+        if new_entries:
+            print(f"[discover] Added {len(new_entries)} new companies for {region_name}:")
+            for entry in new_entries:
+                print(f"  + {entry['name']} -> {entry['career_url']}")
+                # Add to the region's companies list
+                region_companies = search_config["regions"][region_name].get("companies", [])
+                if not any(c["name"].lower() == entry["name"].lower() for c in region_companies):
+                    region_companies.append({"name": entry["name"], "career_url": entry["career_url"]})
+                    search_config["regions"][region_name]["companies"] = region_companies
+
+    # Automatic region distribution for overlaps
+    if regions:
+        print(f"\n[discover] Checking for overlaps in other regions...")
+        for region_name, region_config in regions.items():
+            if region_name not in search_config["regions"]:
+                continue
+            region_companies = search_config["regions"][region_name].get("companies", [])
+            for company in region_companies:
+                discovered_in = region_discoveries.get(company["name"].lower())
+                if discovered_in and discovered_in != region_name:
+                    continue  # Only check companies discovered elsewhere
+                for other_region, other_config in regions.items():
+                    if other_region == region_name:
+                        continue
+                    location = other_config.get("location", other_region.title())
+                    if has_jobs_in_location(company["name"], location):
+                        add_company_to_region(search_config, other_region, company)
+
+    if not any(search_config["regions"][r].get("companies", []) for r in regions.keys()):
         print("\n[discover] No new companies to add.")
         return
 
-    updated = existing + new_entries
-    save_companies(updated, excluded)
+    # Save updated search_config
+    save_search_config(search_config)
 
-    print(f"\n[discover] Added {len(new_entries)} new companies:")
-    for entry in new_entries:
-        print(f"  + {entry['name']} -> {entry['career_url']}")
-    print(f"\n[discover] companies.yml now tracks {len(updated)} companies")
+    total_new = sum(len(search_config["regions"].get(r, {}).get("companies", [])) for r in regions.keys())
+    print(f"\n[discover] Discovery complete. search_config.yml now has companies across {len(regions)} regions")
 
 
 if __name__ == "__main__":
