@@ -1,17 +1,28 @@
-\documentclass[10pt,a4paper,ragged2e,withhyper]{altacv}
+%%%%%%%%%%%%%%%%%
+% Name Resume
+% Built on AltaCV v1.7.4 by LianTze Lim (https://github.com/liantze/AltaCV)
+% Compile with: pdflatex 
+% Requires: altacv.cls in same folder
+%%%%%%%%%%%%%%%%%
 
-% Double-column AltaCV resume template.
-% Set config/api_config.yml -> profile.resume_tex to this file to use it.
+\documentclass[9pt,a4paper,ragged2e,withhyper]{altacv}
 
-\geometry{left=1.2cm,right=1.2cm,top=1.2cm,bottom=1.2cm,columnsep=1.0cm}
+%% AltaCV uses paracol internally. Geometry tuned for 67/33 column split.
+\geometry{left=1.25cm,right=1.25cm,top=1cm,bottom=1cm,columnsep=0.8cm}
 
+% Fonts + font packages
 \usepackage[T1]{fontenc}
 \usepackage{paracol}
 \usepackage{enumitem}
 
-\definecolor{PrimaryColor}{HTML}{1B2A4E}
-\definecolor{BodyColor}{HTML}{1A1A1A}
-\definecolor{AccentColor}{HTML}{7A8DA8}
+% --- Colors ---
+% Dark navy as the dominant brand color; lighter slate for accents.
+\definecolor{PrimaryColor}{HTML}{1B2A4E}     % Dark navy (headings, name)
+\definecolor{SecondaryColor}{HTML}{1B2A4E}   % Same for consistency
+\definecolor{ThirdColor}{HTML}{1B2A4E}
+\definecolor{BodyColor}{HTML}{1A1A1A}        % Near-black body text
+\definecolor{EmphasisColor}{HTML}{1B2A4E}    % Job titles
+\definecolor{AccentColor}{HTML}{7A8DA8}      % Muted slate for dates
 
 \colorlet{name}{PrimaryColor}
 \colorlet{tagline}{PrimaryColor}
@@ -19,74 +30,204 @@
 \colorlet{headingrule}{PrimaryColor}
 \colorlet{subheading}{PrimaryColor}
 \colorlet{accent}{AccentColor}
-\colorlet{emphasis}{PrimaryColor}
+\colorlet{emphasis}{EmphasisColor}
 \colorlet{body}{BodyColor}
 
+%% Tighter bullet lists to fit content on one page
+% \setlist{leftmargin=*,labelsep=0.5em,nosep,itemsep=0.15\baselineskip,after=\vspace{0.15\baselineskip}}
+
+%% Override cvevent so date sits left and location sits right-most within the column.
+%% Original AltaCV puts both into 0.5\linewidth makeboxes, which centers location.
+\renewcommand{\cvevent}[4]{%
+  {\large\color{emphasis}#1\par}%
+  \smallskip\normalsize
+  \ifstrequal{#2}{}{}{\textbf{\color{accent}#2}\par\smallskip}%
+  \ifstrequal{#3}{}{}{%
+    {\small%
+      \BeginAccSupp{method=pdfstringdef,ActualText={\datename:}}\cvDateMarker\EndAccSupp{}~#3%
+      \ifstrequal{#4}{}{}{%
+        \hfill%
+        \BeginAccSupp{method=pdfstringdef,ActualText={\locationname:}}\cvLocationMarker\EndAccSupp{}~#4%
+      }%
+      \par%
+    }%
+  }%
+  \medskip%
+}
+
+% Typography
 \renewcommand{\cvItemMarker}{{\small\textbullet}}
 \renewcommand{\cvRatingMarker}{\faCircle}
+
+% Localize the invisible icon text so ATS parsing stays English
 \renewcommand{\locationname}{Location}
 \renewcommand{\datename}{Date}
 
-\name{Candidate Name}
-\tagline{Product Manager | Platform Products | Data-Driven Delivery}
-\personalinfo{
-  \email{candidate@example.com}
-  \phone{+49 000 000000}
-  \location{Target City, Country}
-  \linkedin{linkedin.com/in/candidate}
+\renewcommand{\personalinfofont}{\raisebox{0pt}[0pt][1.0em]{}} % <-- vertical spacing between wrapped rows}
+\renewcommand{\cvtag}[1]{%
+  \tikz[baseline]\node[
+    anchor=base,
+    draw=accent,
+    rounded corners,
+    inner xsep=0.9ex,
+    inner ysep=0.6ex,
+    text height=1.6ex,
+    text depth=.25ex
+  ] {\small #1};%
+  \raisebox{0pt}[0pt][1.0em]{} % <-- vertical spacing between wrapped rows
 }
 
 \begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% HEADER
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\name{Name}
+\tagline{Title}
+
+% \photoR{2.8cm}{pic.png} % <-- replace with your photo, or comment out if not wanted; adjust size as needed
+
+\personalinfo{%
+  \location{city, country}
+  \phone{+49 }
+  \email{email@email.com}
+  \linkedin{linkedin username}
+  % \github{github username}
+}
+
 \makecvheader
 
-\columnratio{0.67}
+\cvsection{Summary}
+
+Summary Text
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TWO-COLUMN LAYOUT: main column = left, sidebar = right
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\columnratio{0.70}
+\setlength{\columnsep}{1.0cm}
 \begin{paracol}{2}
 
-\cvsection{Summary}
-Product manager with experience leading cross-functional teams, defining product strategy, and delivering measurable user outcomes. Replace this summary with factual positioning that reflects your own background, target roles, and verified achievements.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% MAIN COLUMN (LEFT)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \cvsection{Experience}
 
-\cvevent{Product Manager}{Example Company}{Jan 2022 -- Present}{Target City}
+\cvevent{Title}{\href{https://companylink.com/}{Company Name)}}{Oct 2023 -- Present}{city, country}
 \begin{itemize}
-  \item Led discovery and delivery for a customer-facing platform used by multiple internal teams.
-  \item Prioritized roadmap initiatives using customer feedback, usage data, and stakeholder input.
-  \item Coordinated engineers, designers, and business stakeholders through planning, delivery, and launch.
-  \item Improved a verified product metric by a measured amount that you can defend in interviews.
+  \item Bullet point 1
+  \item Bullet point 2
+  \item Bullet point 3
+  \item Bullet point 4
+  \item Bullet point 5
 \end{itemize}
 
 \divider
 
-\cvevent{Associate Product Manager}{Previous Example Company}{Jan 2020 -- Dec 2021}{Target City}
+\cvevent{Title}{\href{https://companylink.com/}{Company Name)}}{Oct 2023 -- Present}{city, country}
 \begin{itemize}
-  \item Supported product discovery for a workflow product serving a defined user segment.
-  \item Translated user problems into requirements, acceptance criteria, and release plans.
-  \item Partnered with analytics and engineering to measure adoption and identify improvements.
+  \item Bullet point 1
+  \item Bullet point 2
+  \item Bullet point 3
+  \item Bullet point 4
+  \item Bullet point 5
 \end{itemize}
-
-\switchcolumn
-
-\cvsection{Skills}
-\cvtag{Product Strategy}
-\cvtag{Roadmapping}
-\cvtag{Discovery}
-\cvtag{Stakeholder Management}
-\cvtag{Agile Delivery}
-\cvtag{Data Analysis}
-\cvtag{Experimentation}
-\cvtag{Technical Communication}
 
 \cvsection{Education}
 
-\cvevent{Degree or Certification}{University or Institution}{Year -- Year}{Location}
+\cvevent{Degree Title}{\href{https://www.universitylink.de/en/}{University Name}}{Sep 2025 -- Aug 2027}{city, Country}
 \begin{itemize}
-  \item Relevant coursework, thesis, or certification detail.
+  \item Bullet point 1
+  \item Bullet point 2
 \end{itemize}
 
-\cvsection{Links}
-\cvtag{Portfolio}
-\cvtag{GitHub}
-\cvtag{LinkedIn}
+\divider
+
+\cvevent{Degree Title}{\href{https://www.universitylink.de/en/}{University Name}}{Sep 2025 -- Aug 2027}{city, Country}
+\begin{itemize}
+  \item Bullet point 1
+  \item Bullet point 2
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SIDEBAR (RIGHT)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\switchcolumn
+
+% RIGHT COLUMN
+\begin{adjustwidth}{0pt}{0.6em}
+
+\cvsection{Skills}
+
+\cvsubsection{Product}
+\cvtag{Skill 1}
+\cvtag{Skill 2}
+\cvtag{Skill 3}
+\cvtag{Skill 4}
+
+\vspace{0.8em}
+
+\cvsubsection{AI \& Technical}
+\cvtag{Skill 1}
+\cvtag{Skill 2}
+\cvtag{Skill 3}
+\cvtag{Skill 4}
+
+\vspace{0.8em}
+
+\cvsubsection{Tools}
+\cvtag{Skill 1}
+\cvtag{Skill 2}
+\cvtag{Skill 3}
+\cvtag{Skill 4}
+
+\vspace{0.6em}
+
+\cvsection{Languages}
+
+{\textbf{English - C2 (Native)}}\\
+\vspace{0.6em}
+{\textbf{German - B1 (Intermediate)}}\\
+
+\vspace{0.6em}
+
+\cvsection{Certifications}
+
+\href{certification_link}{\textbf{Certification Name}}\\
+{\small Certification Authority}\\[6pt]
+\href{certification_link}{\textbf{Certification Name}}\\
+{\small Certification Authority}
+
+\end{adjustwidth}
 
 \end{paracol}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PROJECTS (commented out - uncomment when tailoring to a specific JD)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% To activate: move \end{paracol} below this block and remove the % from
+% each line. Best used in the main (left) column before \switchcolumn, or
+% as a standalone section after \end{paracol} if it's short.
+%
+% \cvsection{Projects}
+%
+% \cvevent{Project Name}{Tech Stack / Role}{Date Range}{Optional location}
+% \begin{itemize}
+%   \item Outcome-first bullet describing what you shipped and its impact.
+%   \item Second bullet with a concrete metric or scope anchor.
+%   \item Third bullet on technical decisions or collaboration scope.
+% \end{itemize}
+%
+% \divider
+%
+% \cvevent{Another Project}{Tech Stack / Role}{Date Range}{}
+% \begin{itemize}
+%   \item Outcome-first bullet.
+%   \item Scope or metric bullet.
+% \end{itemize}
+
 \end{document}

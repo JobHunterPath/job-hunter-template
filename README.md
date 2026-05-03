@@ -14,7 +14,6 @@ story bank, configure job search, and run the automation from GitHub.
 1. Choose and customize a LaTeX resume:
    - `resume_double_column.tex` for the AltaCV double-column layout.
    - `resume_single_column.tex` for an ATS-friendly single-column layout.
-   - `resume.tex` is a small default entrypoint that loads the double-column version.
 2. Replace `story_bank.md` with verified STAR stories from your experience.
 3. Update every file in `config/`, especially:
    - `api_config.yml`
