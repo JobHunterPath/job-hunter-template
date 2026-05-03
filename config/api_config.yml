@@ -59,7 +59,6 @@ profile:
   # Available resume templates:
   # - resume_double_column.tex: AltaCV double-column layout
   # - resume_single_column.tex: ATS-friendly single-column layout
-  # - resume.tex: default entrypoint that loads resume_double_column.tex
   resume_tex: "resume_double_column.tex"
   story_bank: "story_bank.md"
   profile_image: "profile-placeholder.png"

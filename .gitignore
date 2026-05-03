@@ -22,8 +22,8 @@ jobs/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+pdfa.xmpi
 
 # Keep the source template files tracked
-!resume.tex
 !story_bank.md
 !altacv.cls
