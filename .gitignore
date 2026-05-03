@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local secrets and inputs
+.env
+config/tailor_links.txt
+
+# Logs
+job_hunt.log*
+
+# Generated application output
+jobs/
+
+# LaTeX generated files
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Keep the source template files tracked
+!resume.tex
+!story_bank.md
+!altacv.cls

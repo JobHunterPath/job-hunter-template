@@ -1,0 +1,13 @@
+anthropic>=0.25.0
+requests>=2.31.0
+keyring>=24.0.0
+pyyaml>=6.0
+reportlab>=4.0.0
+pytest>=8.0.0
+
+# Optional LLM providers — install only what you use
+# openai>=1.0.0          # required for: provider=openai or provider=ollama
+# google-generativeai>=0.8.0  # required for: provider=google
+
+# JS rendering for JS-gated job pages (used by sources/jd_fetcher.py)
+playwright>=1.40.0

@@ -1,0 +1,225 @@
+"""
+Fetch and parse a job description from a raw URL.
+
+Extracts the job title, company name, and description text using a staged pipeline:
+  1. HTTP GET the page and strip HTML to plain text.
+  2. If the page is JS-rendered and yields too little text, fall back to Playwright
+     to render the page in a real browser (optional dependency).
+  3. An LLM parses the resulting text into structured fields.
+
+Playwright is optional — install it only when needed:
+  pip install playwright && playwright install chromium
+"""
+
+import json
+import logging
+import re
+import requests
+from typing import Optional
+
+from core.config import load_api_config
+from core.llm_client import get_llm_client
+
+logger = logging.getLogger(__name__)
+
+# Minimum body-text length before we consider the static extraction sufficient.
+_MIN_TEXT_LENGTH = 300
+
+# Map ATS/career URL patterns → company name extractor
+_ATS_PATTERNS = [
+    (r"greenhouse\.io/([^/?#]+)", lambda m: m.group(1)),
+    (r"lever\.co/([^/?#]+)", lambda m: m.group(1)),
+    (r"jobs\.lever\.co/([^/?#]+)", lambda m: m.group(1)),
+    # Use [^./]+ (exclude both dot and slash) so the subdomain label is matched,
+    # not the entire scheme+host prefix (e.g. "https://myco" instead of "myco").
+    (r"([^./]+)\.jobs\.personio\.de", lambda m: m.group(1)),
+    (r"([^./]+)\.breezy\.hr", lambda m: m.group(1)),
+    (r"([^./]+)\.workable\.com", lambda m: m.group(1)),
+    (r"jobs\.smartrecruiters\.com/([^/?#]+)", lambda m: m.group(1)),
+    (r"([^./]+)\.recruitee\.com", lambda m: m.group(1)),
+    (r"careers\.([^./]+)\.", lambda m: m.group(1)),
+    (r"jobs\.([^./]+)\.", lambda m: m.group(1)),
+]
+
+_EXTRACT_SYSTEM = (
+    "You are a job posting parser. "
+    "Return ONLY valid JSON with no markdown fences and no explanation."
+)
+
+_EXTRACT_PROMPT = """\
+Extract the job details from this job posting page text.
+
+URL: {url}
+
+PAGE TEXT (first 8000 chars):
+{text}
+
+Return JSON:
+{{
+  "title": "exact job title from the posting",
+  "company": "company name",
+  "description": "the full job description text including responsibilities and requirements — at least 400 words if available"
+}}
+
+If a field cannot be found, use null."""
+
+
+def _guess_company(url: str) -> Optional[str]:
+    """Guess company name from known ATS URL patterns."""
+    for pattern, extractor in _ATS_PATTERNS:
+        m = re.search(pattern, url, re.IGNORECASE)
+        if m:
+            raw = extractor(m)
+            return raw.replace("-", " ").replace("_", " ").title()
+    return None
+
+
+def _fetch_html(url: str, timeout: int = 12) -> Optional[str]:
+    """GET the page and return raw HTML, or None on failure."""
+    try:
+        resp = requests.get(
+            url,
+            timeout=timeout,
+            allow_redirects=True,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0 Safari/537.36"
+                )
+            },
+        )
+        resp.raise_for_status()
+        return resp.text
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"[jd_fetcher] HTTP {e.response.status_code} for {url}")
+    except Exception as e:
+        logger.error(f"[jd_fetcher] Failed to fetch {url}: {e}")
+    return None
+
+
+def _strip_html(html: str) -> str:
+    """Strip HTML tags and collapse whitespace to plain text."""
+    html = re.sub(
+        r"<(script|style|noscript)[^>]*>.*?</(script|style|noscript)>",
+        " ",
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    html = re.sub(r"<[^>]+>", " ", html)
+    for entity, char in [
+        ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+        ("&nbsp;", " "), ("&#39;", "'"), ("&quot;", '"'),
+        ("&mdash;", "—"), ("&ndash;", "–"), ("&hellip;", "…"),
+    ]:
+        html = html.replace(entity, char)
+    return re.sub(r"\s+", " ", html).strip()
+
+
+def _fetch_playwright(url: str, timeout_ms: int = 20_000) -> Optional[str]:
+    """Render a JS-gated page with Playwright and return plain text.
+
+    Uses Chromium in headless mode. Returns None if playwright is not
+    installed or if rendering fails — callers should treat this as a
+    best-effort enhancement, not a hard requirement.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        logger.debug("[jd_fetcher] playwright not installed; JS rendering unavailable")
+        return None
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0 Safari/537.36"
+                    )
+                )
+                page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+                html = page.content()
+                return _strip_html(html)
+            finally:
+                browser.close()
+    except Exception as e:
+        logger.warning(f"[jd_fetcher] Playwright failed for {url}: {e}")
+    return None
+
+
+def _llm_extract(text: str, url: str) -> dict:
+    """Use an LLM to extract title, company, and description from page text."""
+    api_cfg = load_api_config()
+    llm = api_cfg.get("llm", {})
+    model = llm.get("models", {}).get("validation", "claude-haiku-4-5-20251001")
+
+    try:
+        raw = get_llm_client("validation").complete(
+            system=_EXTRACT_SYSTEM,
+            user=_EXTRACT_PROMPT.format(text=text[:8000], url=url),
+            model=model,
+            max_tokens=1500,
+        )
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            raw = "\n".join(
+                lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+            ).strip()
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning(f"[jd_fetcher] Extraction failed ({e}); falling back to raw text")
+        return {}
+
+
+def fetch_jd(url: str) -> Optional[dict]:
+    """
+    Fetch and parse a job description from a URL.
+
+    Pipeline:
+      1. HTTP GET + HTML strip.
+      2. If extracted text is too sparse (<300 chars), retry with Playwright
+         for JS-rendered pages.
+      3. LLM extracts title, company, and description from the best available text.
+
+    Returns a job dict compatible with the pipeline (keys: title, company,
+    url, snippet, posted, source), or None if no usable description was found.
+    """
+    logger.info(f"[jd_fetcher] Fetching: {url}")
+
+    html = _fetch_html(url)
+    if not html:
+        return None
+
+    plain_text = _strip_html(html)
+
+    if len(plain_text) < _MIN_TEXT_LENGTH:
+        logger.info(
+            f"[jd_fetcher] Sparse content ({len(plain_text)} chars) from {url}; "
+            "trying Playwright for JS rendering"
+        )
+        pw_text = _fetch_playwright(url)
+        if pw_text and len(pw_text) > len(plain_text):
+            plain_text = pw_text
+            logger.info(f"[jd_fetcher] Playwright extracted {len(plain_text)} chars")
+
+    extracted = _llm_extract(plain_text, url)
+
+    title = extracted.get("title") or "Unknown Role"
+    company = extracted.get("company") or _guess_company(url) or "Unknown Company"
+    description = extracted.get("description") or plain_text[:4000]
+
+    if not description.strip():
+        logger.warning(f"[jd_fetcher] No description extracted from {url}")
+        return None
+
+    return {
+        "title": title,
+        "company": company,
+        "url": url,
+        "snippet": description,
+        "posted": "",
+        "source": "direct_link",
+    }

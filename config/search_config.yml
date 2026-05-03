@@ -1,0 +1,54 @@
+regions:
+  primary:
+    enabled: true
+    country: "DE"
+    search_lang: "en"
+    location: "Berlin"
+    description: "Primary search region"
+    companies:
+      - name: Example SaaS Company
+        career_url: boards.greenhouse.io/example
+      - name: Example Lever Company
+        career_url: jobs.lever.co/example
+      - name: Example Careers Site
+        career_url: careers.example.com
+
+global_search:
+  results_per_query: 10
+  job_titles:
+    - "Product Manager"
+    - "Product Owner"
+
+job_boards:
+  arbeitnow:
+    enabled: true
+    max_pages: 3
+  jsearch:
+    enabled: false
+    num_pages: 1
+
+exclusion_rules:
+  excluded_industries:
+    - "gambling"
+    - "casino"
+    - "weapons"
+    - "defence"
+  senior_flags:
+    - "director"
+    - "vp "
+    - "vice president"
+    - "head of product"
+    - "chief product"
+  stale_indicators:
+    - "no longer available"
+    - "this job has expired"
+    - "position has been filled"
+    - "not accepting applications"
+  german_indicators:
+    - "m/w/d"
+    - "wir suchen"
+    - "deutschkenntnisse"
+    - "vollzeit"
+
+excluded_companies:
+  - "Example Excluded Company"

@@ -1,0 +1,11 @@
+# Optional company discovery database.
+# Add companies here manually or let the discovery workflow append new entries.
+
+companies:
+  - name: Example SaaS Company
+    career_url: boards.greenhouse.io/example
+  - name: Example Marketplace
+    career_url: jobs.lever.co/examplemarket
+
+excluded:
+  - example excluded company

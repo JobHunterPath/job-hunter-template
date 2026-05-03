@@ -1,0 +1,41 @@
+tailoring:
+  rules:
+    allowed_modifications:
+      - "summary_section_text"
+      - "bullet_ordering_within_roles"
+      - "keyword_synonyms_to_match_jd"
+    forbidden_modifications:
+      - "inventing_new_metrics"
+      - "inventing_new_skills"
+      - "inventing_new_job_titles"
+      - "inventing_new_companies"
+      - "inventing_new_time_periods"
+    summary:
+      max_lines: 4
+      no_em_dashes: true
+      tone: "confident, technical, results-oriented"
+    bullets:
+      min_per_role: 3
+      max_per_role: 5
+      max_lines_per_bullet: 2
+      required_verb_tense: "past"
+    preserve_latex: true
+    preserve_formatting: true
+    preserve_commands: true
+
+  keyword_strategy:
+    aggressiveness: "natural"
+    priority_keywords:
+      - "product strategy"
+      - "cross-functional leadership"
+      - "data-driven decisions"
+      - "platform thinking"
+    avoid_keywords:
+      - "junior"
+      - "intern"
+      - "entry-level"
+
+  stories:
+    story_bank: "story_bank.md"
+    gap_coverage: "medium"
+    strict_no_fabrication: true

@@ -1,0 +1,67 @@
+# API and LLM configuration for the shareable template repo.
+# Store real secret values in environment variables, GitHub Actions secrets, or
+# your local keyring. Do not commit API keys.
+
+llm:
+  default_provider: anthropic
+  providers:
+    validation: anthropic
+    scoring: anthropic
+    tailoring: anthropic
+    cover_letter: anthropic
+    discovery: anthropic
+  models:
+    validation: "claude-haiku-4-5-20251001"
+    scoring: "claude-haiku-4-5-20251001"
+    tailoring: "claude-sonnet-4-6"
+    cover_letter: "claude-sonnet-4-6"
+    discovery: "claude-sonnet-4-6"
+  max_tokens:
+    validation: 200
+    scoring: 500
+    tailoring: 4000
+    cover_letter: 800
+    discovery: 400
+
+ollama:
+  base_url: "http://localhost:11434"
+
+secrets:
+  anthropic:
+    env_var: "ANTHROPIC_API_KEY"
+    required: true
+  openai:
+    env_var: "OPENAI_API_KEY"
+    required: false
+  google:
+    env_var: "GOOGLE_API_KEY"
+    required: false
+  brave:
+    env_var: "BRAVE_API_KEY"
+    required: true
+  rapidapi:
+    env_var: "RAPIDAPI_KEY"
+    required: false
+
+http:
+  url_verification:
+    enabled: true
+    timeout_seconds: 5
+  brave_search:
+    timeout_seconds: 15
+    results_per_query: 10
+  ats_scraper:
+    timeout_seconds: 10
+  job_boards:
+    timeout_seconds: 10
+
+profile:
+  # Available resume templates:
+  # - resume_double_column.tex: AltaCV double-column layout
+  # - resume_single_column.tex: ATS-friendly single-column layout
+  # - resume.tex: default entrypoint that loads resume_double_column.tex
+  resume_tex: "resume_double_column.tex"
+  story_bank: "story_bank.md"
+  profile_image: "profile-placeholder.png"
+  latex_class: "altacv.cls"
+  output_dir: "jobs"

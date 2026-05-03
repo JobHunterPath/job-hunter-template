@@ -1,0 +1,256 @@
+"""Tests for sources/scraper.py — all HTTP calls are mocked."""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+from sources import scraper
+
+
+CONFIG = {
+    'exclusion_rules': {
+        'senior_flags': ['director', 'vp ', 'head of product'],
+        'excluded_industries': ['banking', 'casino'],
+        'german_indicators': ['m/w/d', 'sucht', 'vollzeit'],
+        'stale_indicators': ['no longer available', 'position has been filled'],
+    },
+    'global_search': {
+        'job_titles': ['Product Manager', 'Product Owner'],
+        'results_per_query': 10,
+    },
+    'regions': {
+        'berlin': {
+            'enabled': True,
+            'country': 'DE',
+            'search_lang': 'en',
+            'location': 'Berlin',
+            'companies': [
+                {'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'},
+                {'name': 'AnotherCo', 'career_url': 'boards.greenhouse.io/anotherco', 'location': 'Berlin'},
+            ],
+        }
+    },
+}
+
+COMPANIES = CONFIG['regions']['berlin']['companies']
+
+
+def _mock_http(results, status=200):
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = {'web': {'results': results}}
+    return resp
+
+
+# ── is_valid_job_url() ───────────────────────────────────────────────────────
+
+def test_valid_job_url_accepts_deep_path():
+    assert scraper.is_valid_job_url('https://boards.greenhouse.io/deliveryhero/jobs/12345') is True
+
+def test_valid_job_url_accepts_lever_slug():
+    assert scraper.is_valid_job_url('https://jobs.lever.co/getyourguide/product-manager-berlin') is True
+
+def test_valid_job_url_rejects_domain_root():
+    assert scraper.is_valid_job_url('https://jobs.testco.com') is False
+
+def test_valid_job_url_rejects_root_slash():
+    assert scraper.is_valid_job_url('https://jobs.testco.com/') is False
+
+def test_valid_job_url_rejects_listing_page_careers():
+    assert scraper.is_valid_job_url('https://company.com/careers') is False
+
+def test_valid_job_url_rejects_listing_page_jobs():
+    assert scraper.is_valid_job_url('https://company.com/jobs') is False
+
+def test_valid_job_url_rejects_single_segment_ats():
+    assert scraper.is_valid_job_url('https://boards.greenhouse.io/deliveryhero') is False
+
+def test_valid_job_url_accepts_two_segment_path():
+    assert scraper.is_valid_job_url('https://jobs.testco.com/en/job/12345') is True
+
+
+# ── is_stale_posting() ───────────────────────────────────────────────────────
+
+def test_stale_posting_detects_no_longer_available():
+    assert scraper.is_stale_posting('PM role', 'This job is no longer available', CONFIG) is True
+
+def test_stale_posting_detects_filled():
+    assert scraper.is_stale_posting('PM role', 'The position has been filled', CONFIG) is True
+
+def test_stale_posting_passes_active_job():
+    assert scraper.is_stale_posting('PM Berlin', 'Join our growing team in Berlin', CONFIG) is False
+
+
+# ── build_queries() ──────────────────────────────────────────────────────────
+
+def test_build_queries_one_per_title():
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    queries = scraper.build_queries(companies, CONFIG)
+    assert len(queries) == 2
+
+def test_build_queries_includes_location():
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    queries = scraper.build_queries(companies, CONFIG)
+    for q, _, _ in queries:
+        assert '"Berlin"' in q
+
+def test_build_queries_no_location_when_empty():
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': ''}]
+    queries = scraper.build_queries(companies, CONFIG)
+    for q, _, _ in queries:
+        assert 'site:jobs.testco.com' in q
+        assert '"Berlin"' not in q
+
+def test_build_queries_contains_site_param():
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    queries = scraper.build_queries(companies, CONFIG)
+    for q, _, _ in queries:
+        assert 'site:jobs.testco.com' in q
+
+def test_build_queries_includes_both_titles():
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    queries = scraper.build_queries(companies, CONFIG)
+    all_queries = [q for q, _, _ in queries]
+    assert any('Product Manager' in q for q in all_queries)
+    assert any('Product Owner' in q for q in all_queries)
+
+
+# ── brave_search() ───────────────────────────────────────────────────────────
+
+def test_brave_search_returns_results():
+    results = [{'url': 'https://jobs.testco.com/en/pm', 'title': 'PM', 'description': 'role'}]
+    with patch('sources.scraper.requests.get', return_value=_mock_http(results)):
+        out = scraper.brave_search('query', {'country': 'DE', 'search_lang': 'en'})
+    assert len(out) == 1
+    assert out[0]['url'] == 'https://jobs.testco.com/en/pm'
+
+def test_brave_search_returns_empty_on_no_results():
+    with patch('sources.scraper.requests.get', return_value=_mock_http([])):
+        out = scraper.brave_search('query', {'country': 'DE'})
+    assert out == []
+
+def test_brave_search_raises_on_http_error():
+    resp = MagicMock()
+    resp.raise_for_status.side_effect = Exception('HTTP 429')
+    with patch('sources.scraper.requests.get', return_value=resp):
+        with pytest.raises(Exception):
+            scraper.brave_search('query', {'country': 'DE'})
+
+
+# ── scrape() — Brave fallback path ───────────────────────────────────────────
+
+def test_scrape_brave_deduplicates_same_url():
+    raw = [
+        {'url': 'https://jobs.testco.com/en/pm', 'title': 'PM', 'description': 'role at TestCo'},
+        {'url': 'https://jobs.testco.com/en/pm', 'title': 'PM duplicate', 'description': 'same url'},
+    ]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    urls = [j['url'] for j in jobs]
+    assert len(urls) == len(set(urls))
+
+def test_scrape_brave_skips_invalid_urls():
+    raw = [{'url': 'https://boards.greenhouse.io/testco', 'title': 'PM', 'description': 'great role'}]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_brave_skips_stale_postings():
+    raw = [{'url': 'https://jobs.testco.com/en/pm', 'title': 'PM', 'description': 'no longer available'}]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_brave_skips_german_postings():
+    raw = [{'url': 'https://jobs.testco.com/en/pm', 'title': 'PM m/w/d', 'description': 'vollzeit'}]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_brave_skips_too_senior():
+    raw = [{'url': 'https://jobs.testco.com/en/dir', 'title': 'Director of Product', 'description': 'senior role'}]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_brave_skips_excluded_industry():
+    raw = [{'url': 'https://jobs.testco.com/en/pm', 'title': 'PM', 'description': 'banking platform'}]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_returns_empty_on_no_companies():
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=[]):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_brave_continues_after_api_error():
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', side_effect=Exception('timeout')):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+
+# ── scrape() — ATS path ───────────────────────────────────────────────────────
+
+ATS_JOB = {
+    "title": "Product Manager",
+    "company": "TestCo",
+    "url": "https://boards.greenhouse.io/testco/jobs/12345",
+    "posted": "2026-04-01",
+    "snippet": "Berlin — Great PM role in Berlin.",
+    "source": "Greenhouse API",
+}
+
+def test_scrape_uses_ats_jobs_when_available():
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[ATS_JOB]):
+        jobs = scraper.scrape()
+    assert len(jobs) >= 1
+    assert jobs[0]['source'] == 'Greenhouse API'
+
+def test_scrape_ats_path_deduplicates_across_companies():
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[ATS_JOB]):
+        jobs = scraper.scrape()
+    urls = [j['url'] for j in jobs]
+    assert len(urls) == len(set(urls))
+
+def test_scrape_ats_path_applies_seniority_filter():
+    senior_job = {**ATS_JOB, "title": "Director of Product", "url": "https://boards.greenhouse.io/testco/jobs/senior"}
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[senior_job]):
+        jobs = scraper.scrape()
+    assert jobs == []
+
+def test_scrape_ats_path_applies_industry_filter():
+    banking_job = {**ATS_JOB, "snippet": "Berlin — banking platform role", "url": "https://boards.greenhouse.io/testco/jobs/bank"}
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[banking_job]):
+        jobs = scraper.scrape()
+    assert jobs == []

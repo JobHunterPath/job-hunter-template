@@ -1,0 +1,92 @@
+\documentclass[10pt,a4paper,ragged2e,withhyper]{altacv}
+
+% Double-column AltaCV resume template.
+% Set config/api_config.yml -> profile.resume_tex to this file to use it.
+
+\geometry{left=1.2cm,right=1.2cm,top=1.2cm,bottom=1.2cm,columnsep=1.0cm}
+
+\usepackage[T1]{fontenc}
+\usepackage{paracol}
+\usepackage{enumitem}
+
+\definecolor{PrimaryColor}{HTML}{1B2A4E}
+\definecolor{BodyColor}{HTML}{1A1A1A}
+\definecolor{AccentColor}{HTML}{7A8DA8}
+
+\colorlet{name}{PrimaryColor}
+\colorlet{tagline}{PrimaryColor}
+\colorlet{heading}{PrimaryColor}
+\colorlet{headingrule}{PrimaryColor}
+\colorlet{subheading}{PrimaryColor}
+\colorlet{accent}{AccentColor}
+\colorlet{emphasis}{PrimaryColor}
+\colorlet{body}{BodyColor}
+
+\renewcommand{\cvItemMarker}{{\small\textbullet}}
+\renewcommand{\cvRatingMarker}{\faCircle}
+\renewcommand{\locationname}{Location}
+\renewcommand{\datename}{Date}
+
+\name{Candidate Name}
+\tagline{Product Manager | Platform Products | Data-Driven Delivery}
+\personalinfo{
+  \email{candidate@example.com}
+  \phone{+49 000 000000}
+  \location{Target City, Country}
+  \linkedin{linkedin.com/in/candidate}
+}
+
+\begin{document}
+\makecvheader
+
+\columnratio{0.67}
+\begin{paracol}{2}
+
+\cvsection{Summary}
+Product manager with experience leading cross-functional teams, defining product strategy, and delivering measurable user outcomes. Replace this summary with factual positioning that reflects your own background, target roles, and verified achievements.
+
+\cvsection{Experience}
+
+\cvevent{Product Manager}{Example Company}{Jan 2022 -- Present}{Target City}
+\begin{itemize}
+  \item Led discovery and delivery for a customer-facing platform used by multiple internal teams.
+  \item Prioritized roadmap initiatives using customer feedback, usage data, and stakeholder input.
+  \item Coordinated engineers, designers, and business stakeholders through planning, delivery, and launch.
+  \item Improved a verified product metric by a measured amount that you can defend in interviews.
+\end{itemize}
+
+\divider
+
+\cvevent{Associate Product Manager}{Previous Example Company}{Jan 2020 -- Dec 2021}{Target City}
+\begin{itemize}
+  \item Supported product discovery for a workflow product serving a defined user segment.
+  \item Translated user problems into requirements, acceptance criteria, and release plans.
+  \item Partnered with analytics and engineering to measure adoption and identify improvements.
+\end{itemize}
+
+\switchcolumn
+
+\cvsection{Skills}
+\cvtag{Product Strategy}
+\cvtag{Roadmapping}
+\cvtag{Discovery}
+\cvtag{Stakeholder Management}
+\cvtag{Agile Delivery}
+\cvtag{Data Analysis}
+\cvtag{Experimentation}
+\cvtag{Technical Communication}
+
+\cvsection{Education}
+
+\cvevent{Degree or Certification}{University or Institution}{Year -- Year}{Location}
+\begin{itemize}
+  \item Relevant coursework, thesis, or certification detail.
+\end{itemize}
+
+\cvsection{Links}
+\cvtag{Portfolio}
+\cvtag{GitHub}
+\cvtag{LinkedIn}
+
+\end{paracol}
+\end{document}
