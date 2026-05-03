@@ -3,6 +3,12 @@
 This repository automates job discovery, fit scoring, resume tailoring, cover
 letter generation, and PDF output for a configurable job search.
 
+## Start Here
+
+For initial setup, read [SETUP.md](SETUP.md) first. It walks through the
+process step by step, including how to choose a resume layout, fill in your
+story bank, configure job search, and run the automation from GitHub.
+
 ## Quick Start
 
 1. Choose and customize a LaTeX resume:
