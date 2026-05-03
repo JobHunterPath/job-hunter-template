@@ -1,223 +1,19 @@
 # Setup Guide
 
-This guide is written for people who are comfortable editing files in GitHub,
-but who do not want to work deeply with code. Follow it from top to bottom.
+Follow this guide from top to bottom. It assumes you are new to GitHub, Git,
+VS Code, Docker, and LaTeX.
 
 ## What This Tool Does
 
-This repository can:
-
-- Search for jobs from company career pages and job boards.
-- Check whether each job looks relevant to your profile.
-- Tailor your LaTeX resume for matching jobs.
-- Write a cover letter using your own story bank.
-- Save everything in a `jobs/` folder for review.
-
-You will need to replace the example profile files with your own information
-before running the automation.
-
-## 1. Create Your Own Private Copy
-
-1. Open the template repository on GitHub.
-2. Click **Use this template**.
-3. Choose **Create a new repository**.
-4. Set visibility to **Private**.
-5. Create the repository.
-
-Your new private repository is now your personal job-hunt workspace.
-
-## 2. Choose Your Resume Layout
-
-This template includes two resume layouts:
-
-- `resume_double_column.tex`: a polished double-column AltaCV resume.
-- `resume_single_column.tex`: a simpler single-column resume that is easier for many applicant tracking systems to parse.
-
-The automation uses the file selected in `config/api_config.yml`.
-
-Open `config/api_config.yml` and find:
-
-```yaml
-profile:
-  resume_tex: "resume_double_column.tex"
-```
-
-Keep this if you want the double-column resume. Change it to this if you want
-the single-column resume:
-
-```yaml
-profile:
-  resume_tex: "resume_single_column.tex"
-```
-
-## 3. Personalize Your Resume
-
-Open the resume file you selected:
-
-- `resume_double_column.tex`, or
-- `resume_single_column.tex`
-
-Replace all placeholder text such as:
-
-- `Candidate Name`
-- `candidate@example.com`
-- `Target City`
-- `Example Company`
-- example bullet points
-
-Use only real information you can defend in an interview. Do not invent
-metrics, titles, skills, companies, or dates.
-
-## 4. Fill In Your Story Bank
-
-Open `story_bank.md`.
-
-Replace the example stories with 3 to 10 real stories from your work,
-education, projects, volunteering, or internships.
-
-Each story should include:
-
-- **Context:** What was the situation?
-- **Action:** What did you personally do?
-- **Result:** What changed because of your work?
-
-Good results can be numbers, but they do not have to be. If you do not have a
-verified number, use a concrete scope instead, such as team size, user group,
-launch timeline, or process improvement.
-
-## 5. Update Your Cover Letter Profile
-
-Open `config/cover_letter_config.yml`.
-
-Find:
-
-```yaml
-candidate_background:
-```
-
-Replace the example text with a short factual summary of your background.
-
-Example:
-
-```yaml
-candidate_background: |
-  Candidate Name, Product Manager based in Berlin.
-  Background: Experience in SaaS products, customer discovery, roadmap planning, and cross-functional delivery.
-  Currently targeting Product Manager and Product Owner roles in Berlin.
-```
-
-Also update the closing:
-
-```yaml
-closing:
-  format: "Best regards,\nCandidate Name"
-```
-
-Replace `Candidate Name` with your name.
-
-## 6. Choose Jobs And Companies To Search
-
-Open `config/search_config.yml`.
-
-Update these parts:
-
-- `location`: your target city or region.
-- `country`: your target country code, such as `DE`, `GB`, or `US`.
-- `job_titles`: the roles you want.
-- `companies`: companies you want the automation to check.
-- `excluded_companies`: companies you never want to process.
-
-Example company entry:
-
-```yaml
-- name: Example Company
-  career_url: boards.greenhouse.io/example
-```
-
-The `career_url` should usually be the company career page or ATS page. Common
-examples include:
-
-- `boards.greenhouse.io/companyname`
-- `jobs.lever.co/companyname`
-- `jobs.smartrecruiters.com/companyname`
-- `careers.companyname.com`
-
-## 7. Set Your Scoring Rules
-
-Open `config/scoring_config.yml`.
-
-Important fields:
-
-```yaml
-min_fit_score: 70
-max_years_experience_required: 5
-```
-
-Use a lower `min_fit_score` if you want more jobs to pass. Use a higher score
-if you want stricter filtering.
-
-## 8. Add API Keys In GitHub
-
-The automation needs API keys. Do not paste keys into files.
-
-In your GitHub repository:
-
-1. Go to **Settings**.
-2. Go to **Secrets and variables**.
-3. Click **Actions**.
-4. Click **New repository secret**.
-
-Add the secrets you use:
-
-- `ANTHROPIC_API_KEY`: required if using Anthropic.
-- `BRAVE_API_KEY`: required for Brave Search.
-- `RAPIDAPI_KEY`: optional, only if using JSearch.
-- `GH_PAT`: optional, only if you want GitHub Actions to commit generated files back to your repository.
-
-The secret names must match `config/api_config.yml`.
-
-## 9. Run The Automation In GitHub
-
-The easiest way to run this tool is through GitHub Actions.
-
-1. Open your repository on GitHub.
-2. Click **Actions**.
-3. Select **Tailor Links** if you want to process specific job links.
-4. Click **Run workflow**.
-5. Paste one job URL into `url_1`.
-6. Click **Run workflow**.
-
-When the run finishes, check the `jobs/` folder in your repository.
-
-For scheduled daily search, use the **Job Hunt Pipeline** workflow. Run it
-manually once before relying on the schedule.
-
-## 10. Review The Output
-
-Each processed job creates a folder like:
-
-```text
-jobs/YYYY-MM-DD_company_role/
-```
-
-Inside you may see:
-
-- `jd.md`: the job description.
-- `resume_tailored.tex`: tailored resume source.
-- `resume_tailored.pdf`: tailored resume PDF, if PDF compilation succeeded.
-- `cover_letter.md`: generated cover letter.
-- `cover_letter.pdf`: generated cover letter PDF, if generated.
-- `meta.json`: score and matching details.
-
-Always review the resume and cover letter before applying.
-
-## 11. Set Up Your Computer
-
-Set up your computer before relying on automation. This lets you edit files in
-VS Code, preview LaTeX resumes, run tests locally, and catch basic setup issues
-before GitHub Actions spends API credits.
-
-### A. Install The Required Apps
+This repository can search for jobs, score them against your profile, tailor a
+LaTeX resume, write cover letters from your story bank, and save the outputs in
+`jobs/`.
+
+Before running the automation, you will set up your computer, create your own
+private copy of the template, edit the resume and config files, test locally,
+then run GitHub Actions.
+
+## 1. Install The Required Apps
 
 Install these first:
 
@@ -229,17 +25,17 @@ Install these first:
 After installing Docker Desktop, open it once and wait until it says the Docker
 engine is running.
 
-### B. Set Up Git Name And Email
+## 2. Set Up Git On Your Computer
 
 Git needs your name and email so your commits are labeled correctly.
 
-Open VS Code, then open the terminal:
+Open VS Code, then open a terminal:
 
 ```text
 Terminal -> New Terminal
 ```
 
-Run these commands, replacing the example values:
+Run these commands with your own name and email:
 
 ```bash
 git config --global user.name "Your Name"
@@ -256,7 +52,17 @@ GitHub does not accept account passwords for Git pushes. The easiest option is
 to sign in through VS Code when prompted. If GitHub asks for a password in the
 terminal, use a GitHub personal access token instead of your GitHub password.
 
-### C. Clone Your GitHub Repository In VS Code
+## 3. Create Your Own Private Repository
+
+1. Open the shared template repository on GitHub.
+2. Click **Use this template**.
+3. Choose **Create a new repository**.
+4. Set visibility to **Private**.
+5. Create the repository.
+
+Your new private repository is now your personal job-hunt workspace.
+
+## 4. Clone Your Repository In VS Code
 
 The easiest way:
 
@@ -275,7 +81,7 @@ cd YOUR_REPOSITORY
 code .
 ```
 
-### D. Install Recommended VS Code Extensions
+## 5. Install Recommended VS Code Extensions
 
 In VS Code, open **Extensions** and install:
 
@@ -289,9 +95,9 @@ In VS Code, open **Extensions** and install:
 These make it easier to edit Python, YAML configs, LaTeX resumes, Docker setup,
 and GitHub pull requests.
 
-### E. Create The Python Environment
+## 6. Create The Python Environment
 
-Install dependencies:
+In the VS Code terminal, run:
 
 ```bash
 python -m venv .venv
@@ -308,15 +114,15 @@ source .venv/bin/activate
 
 If VS Code asks which Python interpreter to use, choose the one inside `.venv`.
 
-### F. Check Docker Works
+## 7. Set Up Docker For LaTeX
 
-Run:
+Check Docker:
 
 ```bash
 docker --version
 ```
 
-Then test the LaTeX Docker image:
+Test the LaTeX Docker image:
 
 ```bash
 docker run --rm texlive/texlive:latest pdflatex --version
@@ -324,10 +130,10 @@ docker run --rm texlive/texlive:latest pdflatex --version
 
 The first run can take a while because Docker downloads the TeX Live image.
 
-### G. Add VS Code LaTeX Build Settings
+## 8. Add VS Code LaTeX Build Settings
 
 Create a folder named `.vscode` in the repository root if it does not exist.
-Inside it, create a file named `settings.json`.
+Inside it, create `settings.json`.
 
 Paste this:
 
@@ -363,7 +169,7 @@ Paste this:
 }
 ```
 
-To build a resume PDF in VS Code:
+To build a resume PDF:
 
 1. Open `resume_double_column.tex` or `resume_single_column.tex`.
 2. Open the Command Palette with `Ctrl+Shift+P`.
@@ -371,19 +177,374 @@ To build a resume PDF in VS Code:
 
 If Docker is not running, start Docker Desktop and try again.
 
-### H. Run The Automation Locally
+## 9. Choose Your Resume Layout
 
-Run direct job links:
+This template includes two resume layouts:
 
-```bash
-PYTHONPATH=scripts python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://example.com/job"
+- `resume_double_column.tex`: polished double-column AltaCV layout.
+- `resume_single_column.tex`: simpler single-column ATS-friendly layout.
+
+The automation uses the file selected in `config/api_config.yml`.
+
+Open `config/api_config.yml` and find:
+
+```yaml
+profile:
+  resume_tex: "resume_double_column.tex"
 ```
 
-Run the daily hunt locally:
+Change it to this if you prefer the single-column resume:
+
+```yaml
+profile:
+  resume_tex: "resume_single_column.tex"
+```
+
+## 10. Personalize Your Resume
+
+Open the resume file you selected and replace placeholders such as:
+
+- `Candidate Name`
+- `candidate@example.com`
+- `Target City`
+- `Example Company`
+- example bullet points
+
+Use only real information you can defend in an interview. Do not invent
+metrics, titles, skills, companies, or dates.
+
+## 11. Fill In Your Story Bank
+
+Open `story_bank.md`.
+
+Replace the examples with 3 to 10 real stories from your work, education,
+projects, volunteering, or internships.
+
+Each story should include:
+
+- **Context:** What was the situation?
+- **Action:** What did you personally do?
+- **Result:** What changed because of your work?
+
+If you do not have a verified number, use a concrete scope instead, such as
+team size, user group, launch timeline, or process improvement.
+
+## 12. Update Your Cover Letter Profile
+
+Open `config/cover_letter_config.yml`.
+
+Find:
+
+```yaml
+candidate_background:
+```
+
+Replace the example text with a short factual summary of your background.
+
+Also update the closing:
+
+```yaml
+closing:
+  format: "Best regards,\nCandidate Name"
+```
+
+Replace `Candidate Name` with your name.
+
+## 13. Configure Job Search
+
+Open `config/search_config.yml`.
+
+Update:
+
+- `location`: your target city or region.
+- `country`: your target country code, such as `DE`, `GB`, or `US`.
+- `job_titles`: the roles you want.
+- `companies`: companies you want the automation to check.
+- `excluded_companies`: companies you never want to process.
+
+Example company entry:
+
+```yaml
+- name: Example Company
+  career_url: boards.greenhouse.io/example
+```
+
+Common career URL formats:
+
+- `boards.greenhouse.io/companyname`
+- `jobs.lever.co/companyname`
+- `jobs.smartrecruiters.com/companyname`
+- `careers.companyname.com`
+
+## 14. Set Your Scoring Rules
+
+Open `config/scoring_config.yml`.
+
+Important fields:
+
+```yaml
+min_fit_score: 70
+max_years_experience_required: 5
+```
+
+Use a lower `min_fit_score` if you want more jobs to pass. Use a higher score
+if you want stricter filtering.
+
+## 15. Get API Keys Or Set Up A Local LLM
+
+The automation needs two kinds of services:
+
+- an LLM provider for validation, scoring, tailoring, and cover letters
+- Brave Search for finding jobs on the web
+
+You can use a cloud LLM provider, or you can run a local LLM with Ollama.
+
+### Option A: Anthropic Claude
+
+Use this if you want strong resume and cover-letter quality with minimal setup.
+
+1. Go to `https://console.anthropic.com/`.
+2. Create or sign in to your account.
+3. Add billing if required.
+4. Open API keys in the console.
+5. Create a new key.
+6. Copy it once and store it safely.
+
+Use this secret name:
+
+```text
+ANTHROPIC_API_KEY
+```
+
+In `config/api_config.yml`, keep:
+
+```yaml
+llm:
+  default_provider: anthropic
+```
+
+### Option B: OpenAI
+
+Use this if you prefer OpenAI models.
+
+1. Go to `https://platform.openai.com/`.
+2. Create or sign in to your account.
+3. Create a project if prompted.
+4. Open API keys.
+5. Create a new API key.
+6. Copy it once and store it safely.
+
+Use this secret name:
+
+```text
+OPENAI_API_KEY
+```
+
+In `config/api_config.yml`, set:
+
+```yaml
+llm:
+  default_provider: openai
+  providers:
+    validation: openai
+    scoring: openai
+    tailoring: openai
+    cover_letter: openai
+    discovery: openai
+```
+
+Install the OpenAI Python package:
 
 ```bash
-PYTHONPATH=scripts python scripts/pipeline/orchestrator.py
+pip install openai
 ```
+
+### Option C: Google Gemini
+
+Use this if you prefer Google Gemini.
+
+1. Go to `https://aistudio.google.com/`.
+2. Sign in with your Google account.
+3. Open API keys.
+4. Create a new API key.
+5. Copy it once and store it safely.
+
+Use this secret name:
+
+```text
+GOOGLE_API_KEY
+```
+
+In `config/api_config.yml`, set:
+
+```yaml
+llm:
+  default_provider: google
+  providers:
+    validation: google
+    scoring: google
+    tailoring: google
+    cover_letter: google
+    discovery: google
+```
+
+Install the Google package:
+
+```bash
+pip install google-generativeai
+```
+
+### Option D: Local LLM With Ollama
+
+Use this if you want to run models on your own computer. This avoids LLM API
+costs, but quality and speed depend on your machine and model.
+
+1. Install Ollama from `https://ollama.com/`.
+2. Open a terminal.
+3. Pull a model:
+
+```bash
+ollama pull llama3.2
+```
+
+4. Test it:
+
+```bash
+ollama run llama3.2
+```
+
+5. Type a short message. If the model responds, Ollama works.
+6. Exit with `Ctrl+D` or close the terminal.
+
+The automation talks to Ollama at:
+
+```text
+http://localhost:11434
+```
+
+In `config/api_config.yml`, set:
+
+```yaml
+llm:
+  default_provider: ollama
+  providers:
+    validation: ollama
+    scoring: ollama
+    tailoring: ollama
+    cover_letter: ollama
+    discovery: ollama
+  models:
+    validation: "llama3.2"
+    scoring: "llama3.2"
+    tailoring: "llama3.2"
+    cover_letter: "llama3.2"
+    discovery: "llama3.2"
+
+secrets:
+  anthropic:
+    required: false
+```
+
+Install the OpenAI Python package because Ollama uses an OpenAI-compatible API
+inside this project:
+
+```bash
+pip install openai
+```
+
+Keep Ollama running whenever you run the automation locally.
+
+Important: GitHub-hosted Actions cannot use Ollama running on your laptop. If
+you want scheduled GitHub Actions, use a cloud provider such as Anthropic,
+OpenAI, or Google, or set up your own self-hosted runner.
+
+### Brave Search API
+
+Brave Search is used to discover jobs from web search.
+
+1. Go to `https://brave.com/search/api/`.
+2. Create an account.
+3. Choose a plan.
+4. Create or copy your API key.
+
+Use this secret name:
+
+```text
+BRAVE_API_KEY
+```
+
+### RapidAPI / JSearch, Optional
+
+JSearch is optional. It can add more job-board results, but the pipeline can run
+without it.
+
+1. Go to `https://rapidapi.com/`.
+2. Create an account.
+3. Subscribe to the JSearch API if you want to use it.
+4. Open your RapidAPI app or project.
+5. Copy the API key.
+
+Use this secret name:
+
+```text
+RAPIDAPI_KEY
+```
+
+## 16. Store API Keys Locally
+
+For local testing, store keys in your terminal session or in your system
+keyring.
+
+### Quick Local Option: Environment Variables
+
+PowerShell on Windows:
+
+```powershell
+$env:ANTHROPIC_API_KEY="paste-your-key-here"
+$env:BRAVE_API_KEY="paste-your-key-here"
+```
+
+macOS/Linux:
+
+```bash
+export ANTHROPIC_API_KEY="paste-your-key-here"
+export BRAVE_API_KEY="paste-your-key-here"
+```
+
+Use `OPENAI_API_KEY` or `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY` if you
+chose OpenAI or Google.
+
+These values last only for the current terminal session.
+
+### Better Local Option: Keyring
+
+With your `.venv` active, run Python:
+
+```bash
+python
+```
+
+Then paste the lines you need:
+
+```python
+import keyring
+keyring.set_password("job-hunt", "ANTHROPIC_API_KEY", "paste-your-key-here")
+keyring.set_password("job-hunt", "BRAVE_API_KEY", "paste-your-key-here")
+keyring.set_password("job-hunt", "RAPIDAPI_KEY", "paste-your-key-here")
+```
+
+Use `OPENAI_API_KEY` or `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY` if you
+chose OpenAI or Google.
+
+Exit Python:
+
+```python
+exit()
+```
+
+Never commit API keys into files.
+
+## 17. Test Locally First
 
 Run tests:
 
@@ -391,61 +552,93 @@ Run tests:
 python -m pytest -q
 ```
 
-## 12. Getting Future Template Updates
+Run one direct job link:
+
+```bash
+PYTHONPATH=scripts python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://example.com/job"
+```
+
+You need API keys, or Ollama running locally, before real job processing can
+work. If local testing is too much, use GitHub Actions after adding secrets in
+the next step.
+
+## 18. Add API Keys In GitHub
+
+Do not paste API keys into files.
+
+In your GitHub repository:
+
+1. Go to **Settings**.
+2. Go to **Secrets and variables**.
+3. Click **Actions**.
+4. Click **New repository secret**.
+
+Add the secrets you use:
+
+- `ANTHROPIC_API_KEY`: required if using Anthropic.
+- `OPENAI_API_KEY`: required if using OpenAI.
+- `GOOGLE_API_KEY`: required if using Google Gemini.
+- `BRAVE_API_KEY`: required for Brave Search.
+- `RAPIDAPI_KEY`: optional, only if using JSearch.
+- `GH_PAT`: optional, only if you want GitHub Actions to commit generated files back to your repository.
+
+If you use Ollama locally, you do not need an LLM API key for local runs. For
+GitHub-hosted Actions, use a cloud LLM provider instead.
+
+The secret names must match `config/api_config.yml`.
+
+## 19. Run The Automation In GitHub
+
+1. Open your repository on GitHub.
+2. Click **Actions**.
+3. Select **Tailor Links** if you want to process specific job links.
+4. Click **Run workflow**.
+5. Paste one job URL into `url_1`.
+6. Click **Run workflow**.
+
+When the run finishes, check the `jobs/` folder in your repository.
+
+For scheduled daily search, use the **Job Hunt Pipeline** workflow. Run it
+manually once before relying on the schedule.
+
+## 20. Review The Output
+
+Each processed job creates a folder like:
+
+```text
+jobs/YYYY-MM-DD_company_role/
+```
+
+Inside you may see:
+
+- `jd.md`: the job description.
+- `resume_tailored.tex`: tailored resume source.
+- `resume_tailored.pdf`: tailored resume PDF, if PDF compilation succeeded.
+- `cover_letter.md`: generated cover letter.
+- `cover_letter.pdf`: generated cover letter PDF, if generated.
+- `meta.json`: score and matching details.
+
+Always review the resume and cover letter before applying.
+
+## 21. Getting Future Template Updates
 
 Updates from the original template are not automatic in repositories created
 with **Use this template**. This is intentional: your resume, story bank, and
 configs are personal, so updates should not overwrite them without your review.
 
-Use the steps below whenever you want to pull improvements from the shared
-template into your own private repo.
+### A. Add The Template Repo As Upstream
 
-### A. Open Your Repo In VS Code
-
-1. Open VS Code.
-2. Open your cloned repository folder.
-3. Open a terminal:
-
-```text
-Terminal -> New Terminal
-```
-
-### B. Check Your Current Branch
-
-Run:
-
-```bash
-git branch
-```
-
-The branch with `*` is your current branch. Most repositories use `main`.
-Some older repositories use `master`.
-
-The examples below use `main`. If your branch is `master`, replace `main` with
-`master` in the commands.
-
-### C. Add The Template Repo As Upstream
-
-You only need to do this once.
+Do this once:
 
 ```bash
 git remote add upstream https://github.com/Job-Network-Projects/job-hunter-template.git
 git remote -v
 ```
 
-You should see both:
+You should see both `origin` and `upstream`. If Git says `remote upstream
+already exists`, continue.
 
-```text
-origin    your private repo
-upstream  the shared template repo
-```
-
-If Git says `remote upstream already exists`, that is fine. Continue to the
-next step.
-
-### D. Save Your Current Work First
-
-Before pulling template updates, save your own changes:
+### B. Save Your Work
 
 ```bash
 git status
@@ -453,98 +646,66 @@ git add .
 git commit -m "save my local changes"
 ```
 
-If Git says `nothing to commit`, that is fine.
+If Git says `nothing to commit`, continue.
 
-### E. Create A Backup Branch
-
-This gives you an easy way back if anything goes wrong:
+### C. Create A Backup Branch
 
 ```bash
+git branch
 git checkout -b backup-before-template-update
 git checkout main
 ```
 
-Again, use `master` instead of `main` if your repo uses `master`.
+Use `master` instead of `main` if your repo uses `master`.
 
-### F. Pull And Merge Template Updates
-
-First fetch the latest template branches:
+### D. Fetch And Merge Updates
 
 ```bash
 git fetch upstream
 git branch -r
 ```
 
-Look for one of these lines:
+Look for `upstream/main` or `upstream/master`.
 
-```text
-upstream/main
-upstream/master
-```
-
-Use the branch that actually appears. Do not run `git merge upstream` by
-itself. `upstream` is only the remote name; you must merge a branch such as
-`upstream/main`.
-
-If you see `upstream/main`, run:
+If you see `upstream/main`:
 
 ```bash
 git checkout main
 git merge upstream/main
 ```
 
-If this is your first time merging from the template and Git says the histories
-are unrelated, run:
+If Git says histories are unrelated, run:
 
 ```bash
 git merge --allow-unrelated-histories upstream/main
 ```
 
-If there are no conflicts, Git will complete the merge automatically.
+If the template branch is `master`, use:
 
-Then push the updated repo back to GitHub:
+```bash
+git checkout master
+git merge upstream/master
+```
+
+Push after a successful merge:
 
 ```bash
 git push origin main
 ```
 
-If your branch is `master`, use:
+### E. Resolve Merge Conflicts
 
-```bash
-git fetch upstream
-git checkout master
-git merge upstream/master
-git push origin master
-```
-
-If Git says `upstream/main - not something we can merge`, run:
-
-```bash
-git branch -r
-```
-
-Then check what the upstream branch is actually called. If the output shows
-`upstream/master`, use `upstream/master`. If it shows no `upstream/...` branches,
-the remote URL or your GitHub access to the template repo is not set up
-correctly.
-
-### G. If Git Reports Merge Conflicts
-
-Merge conflicts mean both you and the template changed the same part of a file.
-This is normal for files like configs, resumes, and documentation.
+Conflicts are normal if both you and the template changed the same file.
 
 In VS Code:
 
-1. Open the **Source Control** panel.
-2. Click each file listed under **Merge Changes**.
-3. VS Code will show buttons such as:
-   - **Accept Current Change**: keep your version.
-   - **Accept Incoming Change**: use the template version.
-   - **Accept Both Changes**: keep both and edit manually.
-4. Save the file after choosing.
-5. Repeat for every conflicted file.
+1. Open **Source Control**.
+2. Click each conflicted file.
+3. Use **Accept Current Change**, **Accept Incoming Change**, or **Accept Both Changes**.
+4. Save the file.
+5. Repeat for all conflicted files.
 
-After all conflicts are fixed:
+Then run:
 
 ```bash
 git add .
@@ -552,70 +713,14 @@ git commit -m "merge template updates"
 git push origin main
 ```
 
-Use `master` instead of `main` if needed.
-
-### H. If You Want To Cancel A Bad Merge
-
-If the merge feels wrong and you have not committed it yet, run:
+If the merge feels wrong before committing:
 
 ```bash
 git merge --abort
 ```
 
-You can also go back to your backup branch:
-
-```bash
-git checkout backup-before-template-update
-```
-
-### What Usually Merges Cleanly
-
-Updates to reusable automation code usually merge cleanly:
-
-- `scripts/`
-- `tests/`
-- `.github/workflows/`
-- `requirements.txt`
-- documentation
-
-### Files You Should Review Carefully
-
-These files often contain your personal setup, so Git may show conflicts if both
-you and the template changed them:
-
-- `config/*.yml`
-- `resume_double_column.tex`
-- `resume_single_column.tex`
-- `resume.tex`
-- `story_bank.md`
-- `README.md`
-- `SETUP.md`
-
-### How Merge Conflicts Work
-
-If Git cannot combine changes automatically, it marks the file with conflict
-blocks:
-
-```text
-<<<<<<< HEAD
-your version
-=======
-template version
->>>>>>> upstream/main
-```
-
-Open the file in VS Code, choose which parts to keep, remove the conflict
-markers, then save the file.
-
-After resolving conflicts:
-
-```bash
-git add .
-git commit -m "merge template updates"
-```
-
-If you are unsure, keep your personal resume, story bank, and config values, and
-copy only the useful new comments or options from the template.
+Keep your personal resume, story bank, and config values unless you explicitly
+want to replace them.
 
 ## Common Problems
 
