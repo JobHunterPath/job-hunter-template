@@ -14,16 +14,17 @@ story bank, configure job search, and run the automation from GitHub.
 1. Choose and customize a LaTeX resume:
    - `resume_double_column.tex` for the AltaCV double-column layout.
    - `resume_single_column.tex` for an ATS-friendly single-column layout.
-2. Replace `story_bank.md` with verified STAR stories from your experience.
-3. Update every file in `config/`, especially:
+2. Replace `story_bank.md` with raw notes and verified STAR stories from your experience.
+3. Customize `project_instructions.md` with your own profile, ID scheme, and chatbot prompts.
+4. Update every file in `config/`, especially:
    - `api_config.yml`
    - `search_config.yml`
    - `scoring_config.yml`
    - `cover_letter_config.yml`
    - `tailoring_config.yml`
-4. In `config/api_config.yml`, set `profile.resume_tex` to the resume file you want the pipeline to tailor.
-5. Store API keys in environment variables, GitHub Actions secrets, or keyring.
-6. Run tests, then run the pipeline locally or through GitHub Actions.
+5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
+6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
+7. Run tests, then run the pipeline locally or through GitHub Actions.
 
 ## Local Run
 

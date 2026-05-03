@@ -217,17 +217,64 @@ metrics, titles, skills, companies, or dates.
 
 Open `story_bank.md`.
 
-Replace the examples with 3 to 10 real stories from your work, education,
-projects, volunteering, or internships.
+The story bank has two layers:
 
-Each story should include:
+1. **Draft - Raw Notes:** messy notes about your work, projects, volunteering,
+   education, or side projects.
+2. **Final - refined STAR stories:** polished stories that a chatbot has helped
+   convert into Situation, Task, Action, Result format.
 
-- **Context:** What was the situation?
-- **Action:** What did you personally do?
-- **Result:** What changed because of your work?
+Start by adding raw notes. Do not try to make them perfect.
+
+### Story IDs
+
+Each story has a stable ID that you create. IDs help you categorize your
+experiences and retrieve them later when tailoring to a job.
+
+Examples:
+
+- `ACME-PM-01`: one company, one Product Manager role
+- `SHOP-PO-01`: one company, one Product Owner role
+- `TECH-01`: technical project
+- `VOL-01`: volunteer project
+- `UNI-01`: university project
+- `SIDE-01`: side project
+
+Rules:
+
+- Do not reuse IDs.
+- Do not renumber old IDs.
+- Add new IDs to the allocation log at the bottom of `story_bank.md`.
+
+### Raw Notes To Final STAR Stories
+
+Use `project_instructions.md` with an LLM chatbot to convert raw notes into
+final STAR stories.
+
+Simple workflow:
+
+1. Add raw notes under `Draft - Raw Notes` in `story_bank.md`.
+2. Open `project_instructions.md`.
+3. Copy **Prompt 1 - Initial Story Refinement** into your chatbot.
+4. Paste the relevant raw notes below the prompt.
+5. Review the chatbot output carefully.
+6. Move only accurate, defensible stories into `Final - refined STAR stories`.
+7. Update the allocation log.
+
+The automation uses the final refined stories for cover letters, so keep that
+section factual and clean.
 
 If you do not have a verified number, use a concrete scope instead, such as
 team size, user group, launch timeline, or process improvement.
+
+The story bank and project instruction file paths are configurable in
+`config/api_config.yml`:
+
+```yaml
+profile:
+  story_bank: "story_bank.md"
+  project_instructions: "project_instructions.md"
+```
 
 ## 12. Update Your Cover Letter Profile
 

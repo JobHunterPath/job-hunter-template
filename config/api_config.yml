@@ -61,6 +61,7 @@ profile:
   # - resume_single_column.tex: ATS-friendly single-column layout
   resume_tex: "resume_double_column.tex"
   story_bank: "story_bank.md"
+  project_instructions: "project_instructions.md"
   profile_image: "profile-placeholder.png"
   latex_class: "altacv.cls"
   output_dir: "jobs"
