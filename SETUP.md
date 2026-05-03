@@ -805,6 +805,19 @@ git merge --abort
 Keep your personal resume, story bank, and config values unless you explicitly
 want to replace them.
 
+## 22. Automatically Delete Merged PR Branches
+
+If you use pull requests in your own repo, GitHub can delete the PR branch after
+the PR is merged.
+
+1. Open your repo on GitHub.
+2. Go to **Settings -> General**.
+3. Scroll to **Pull Requests**.
+4. Turn on **Automatically delete head branches**.
+
+This only deletes the temporary branch after a PR is merged. It does not delete
+your `main` branch, your files, or branches from someone else's fork.
+
 ## Common Problems
 
 **No jobs found**
