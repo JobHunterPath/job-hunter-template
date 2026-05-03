@@ -174,6 +174,29 @@ def _llm_extract(text: str, url: str) -> dict:
         return {}
 
 
+def _normalize_extracted_job(extracted) -> dict:
+    """Normalize LLM extraction output to one job dict.
+
+    Some pages or models can produce a JSON array even though the prompt asks
+    for a single object. Prefer the first object that looks like a job posting.
+    """
+    if isinstance(extracted, dict):
+        return extracted
+
+    if isinstance(extracted, list):
+        for item in extracted:
+            if isinstance(item, dict) and any(
+                item.get(key) for key in ("title", "company", "description")
+            ):
+                return item
+
+    logger.warning(
+        "[jd_fetcher] Unexpected extraction shape %s; falling back to raw text",
+        type(extracted).__name__,
+    )
+    return {}
+
+
 def fetch_jd(url: str) -> Optional[dict]:
     """
     Fetch and parse a job description from a URL.
@@ -205,7 +228,7 @@ def fetch_jd(url: str) -> Optional[dict]:
             plain_text = pw_text
             logger.info(f"[jd_fetcher] Playwright extracted {len(plain_text)} chars")
 
-    extracted = _llm_extract(plain_text, url)
+    extracted = _normalize_extracted_job(_llm_extract(plain_text, url))
 
     title = extracted.get("title") or "Unknown Role"
     company = extracted.get("company") or _guess_company(url) or "Unknown Company"

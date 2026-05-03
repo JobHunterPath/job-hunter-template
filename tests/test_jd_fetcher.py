@@ -108,6 +108,26 @@ class TestFetchJd:
         assert result is not None
         assert len(result["snippet"]) > 0
 
+    def test_handles_list_shaped_llm_result(self):
+        extracted = [
+            {
+                "title": "Technical Product Owner",
+                "company": "StepStone",
+                "description": "Full StepStone job description.",
+            }
+        ]
+
+        with patch("sources.jd_fetcher._fetch_html", return_value=RICH_HTML), \
+             patch("sources.jd_fetcher._llm_extract", return_value=extracted):
+            result = jd_fetcher.fetch_jd(
+                "https://www.stepstone.de/jobs/technical-product-owner/in-berlin"
+            )
+
+        assert result is not None
+        assert result["title"] == "Technical Product Owner"
+        assert result["company"] == "StepStone"
+        assert result["snippet"] == "Full StepStone job description."
+
     def test_uses_guessed_company_when_llm_returns_null(self):
         no_company = '{"title": "PM", "company": null, "description": "desc"}'
         with patch("sources.jd_fetcher._fetch_html", return_value=RICH_HTML), \

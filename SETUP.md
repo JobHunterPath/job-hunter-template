@@ -649,6 +649,49 @@ the next step.
 
 Do not paste API keys into files.
 
+`GH_PAT` is required if you want GitHub Actions to run this automation and save
+generated files back into your repository. Without it, the workflow may run but
+will fail when it tries to push `jobs/`, `README.md`, or updated config files.
+
+### Create `GH_PAT`
+
+1. Open GitHub.
+2. Click your profile picture in the top-right corner.
+3. Go to **Settings**.
+4. Go to **Developer settings**.
+5. Go to **Personal access tokens**.
+6. Choose **Fine-grained tokens**.
+7. Click **Generate new token**.
+8. Use a clear name, for example:
+
+```text
+job-hunt-actions
+```
+
+9. Set an expiration date you are comfortable maintaining.
+10. For **Resource owner**, select your GitHub user or organization.
+11. For **Repository access**, choose **Only select repositories**.
+12. Select the private repo you created from this template.
+13. Under **Repository permissions**, set:
+
+```text
+Contents: Read and write
+```
+
+14. Click **Generate token**.
+15. Copy the token immediately. GitHub will not show it again.
+
+If your organization blocks fine-grained tokens, create a classic token instead
+and give it the `repo` scope.
+
+For this template's workflows, `GH_PAT` only needs to check out your repo and
+push normal generated files back to the same repo. That is why
+`Contents: Read and write` is enough.
+
+`GH_PAT` does not need workflow permission unless you later change the workflows
+so they push edits to files under `.github/workflows/` or call the GitHub API to
+start other workflow runs.
+
 In your GitHub repository:
 
 1. Go to **Settings**.
@@ -663,7 +706,7 @@ Add the secrets you use:
 - `GOOGLE_API_KEY`: required if using Google Gemini.
 - `BRAVE_API_KEY`: required for Brave Search.
 - `RAPIDAPI_KEY`: optional, only if using JSearch.
-- `GH_PAT`: optional, only if you want GitHub Actions to commit generated files back to your repository.
+- `GH_PAT`: required for GitHub Actions to commit generated files back to your repository.
 
 If you use Ollama locally, you do not need an LLM API key for local runs. For
 GitHub-hosted Actions, use a cloud LLM provider instead.
