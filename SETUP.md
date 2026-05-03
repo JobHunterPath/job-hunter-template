@@ -468,12 +468,36 @@ Again, use `master` instead of `main` if your repo uses `master`.
 
 ### F. Pull And Merge Template Updates
 
-Run:
+First fetch the latest template branches:
 
 ```bash
 git fetch upstream
+git branch -r
+```
+
+Look for one of these lines:
+
+```text
+upstream/main
+upstream/master
+```
+
+Use the branch that actually appears. Do not run `git merge upstream` by
+itself. `upstream` is only the remote name; you must merge a branch such as
+`upstream/main`.
+
+If you see `upstream/main`, run:
+
+```bash
 git checkout main
 git merge upstream/main
+```
+
+If this is your first time merging from the template and Git says the histories
+are unrelated, run:
+
+```bash
+git merge --allow-unrelated-histories upstream/main
 ```
 
 If there are no conflicts, Git will complete the merge automatically.
@@ -487,10 +511,22 @@ git push origin main
 If your branch is `master`, use:
 
 ```bash
+git fetch upstream
 git checkout master
 git merge upstream/master
 git push origin master
 ```
+
+If Git says `upstream/main - not something we can merge`, run:
+
+```bash
+git branch -r
+```
+
+Then check what the upstream branch is actually called. If the output shows
+`upstream/master`, use `upstream/master`. If it shows no `upstream/...` branches,
+the remote URL or your GitHub access to the template repo is not set up
+correctly.
 
 ### G. If Git Reports Merge Conflicts
 
