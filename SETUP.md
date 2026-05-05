@@ -800,10 +800,84 @@ Always review the resume and cover letter before applying.
 ## 21. Getting Future Template Updates
 
 Updates from the original template are not automatic in repositories created
-with **Use this template**. This is intentional: your resume, story bank, and
-configs are personal, so updates should not overwrite them without your review.
+with **Use this template**. This is intentional: your resume, story bank, jobs,
+and configs are personal, so updates should arrive through a pull request that
+you can review.
 
-### A. Add The Template Repo As Upstream
+### A. Recommended: Use The Update Workflow
+
+Use this when you want the latest code, workflows, dependencies, and docs without
+typing Git commands.
+
+1. Open your repository on GitHub.
+2. Go to **Actions**.
+3. Open **Update From Template**.
+4. Click **Run workflow**.
+5. Keep `upstream_repo` as `Job-Network-Projects/job-hunter-template`.
+6. Keep `upstream_branch` as `main`.
+7. Leave `update_config` turned off unless you want template config files to
+   overwrite your current config files.
+8. Click **Run workflow**.
+9. Wait for the workflow to open a pull request.
+10. Review the changed files and merge the pull request when ready.
+11. Pull the merged changes to your laptop:
+
+```bash
+git checkout main
+git pull origin main
+```
+
+If your local branch is named `master`, use:
+
+```bash
+git checkout master
+git pull origin master
+```
+
+By default, the workflow preserves:
+
+- resumes
+- story bank
+- project instructions
+- generated jobs
+- config files
+
+If a release adds new config fields, read the pull request description and this
+`SETUP.md`, then copy only the new fields you need into your own config files.
+
+### B. If You Have Local Uncommitted Changes
+
+Before pulling updates locally, check whether you have unsaved local changes:
+
+```bash
+git status
+```
+
+If Git says `nothing to commit, working tree clean`, you can pull normally:
+
+```bash
+git pull origin main
+```
+
+If Git shows changed files, save them first:
+
+```bash
+git add .
+git commit -m "save my local changes"
+git pull origin main
+```
+
+If Git says the branch has no upstream tracking branch, run:
+
+```bash
+git branch --set-upstream-to=origin/main main
+git pull
+```
+
+### C. Manual Git Fallback
+
+Use this only if the update workflow is unavailable or you prefer working from
+your terminal.
 
 Do this once:
 
@@ -812,10 +886,9 @@ git remote add upstream https://github.com/Job-Network-Projects/job-hunter-templ
 git remote -v
 ```
 
-You should see both `origin` and `upstream`. If Git says `remote upstream
-already exists`, continue.
+If Git says `remote upstream already exists`, continue.
 
-### B. Save Your Work
+Save your work:
 
 ```bash
 git status
@@ -825,7 +898,7 @@ git commit -m "save my local changes"
 
 If Git says `nothing to commit`, continue.
 
-### C. Create A Backup Branch
+Create a backup branch:
 
 ```bash
 git branch
@@ -835,18 +908,11 @@ git checkout main
 
 Use `master` instead of `main` if your repo uses `master`.
 
-### D. Fetch And Merge Updates
+Fetch and merge updates:
 
 ```bash
 git fetch upstream
 git branch -r
-```
-
-Look for `upstream/main` or `upstream/master`.
-
-If you see `upstream/main`:
-
-```bash
 git checkout main
 git merge upstream/main
 ```
@@ -857,32 +923,15 @@ If Git says histories are unrelated, run:
 git merge --allow-unrelated-histories upstream/main
 ```
 
-If the template branch is `master`, use:
-
-```bash
-git checkout master
-git merge upstream/master
-```
-
 Push after a successful merge:
 
 ```bash
 git push origin main
 ```
 
-### E. Resolve Merge Conflicts
-
-Conflicts are normal if both you and the template changed the same file.
-
-In VS Code:
-
-1. Open **Source Control**.
-2. Click each conflicted file.
-3. Use **Accept Current Change**, **Accept Incoming Change**, or **Accept Both Changes**.
-4. Save the file.
-5. Repeat for all conflicted files.
-
-Then run:
+Conflicts are normal if both you and the template changed the same file. In
+VS Code, open **Source Control**, click each conflicted file, choose the version
+you want to keep, save the file, then run:
 
 ```bash
 git add .
@@ -895,9 +944,6 @@ If the merge feels wrong before committing:
 ```bash
 git merge --abort
 ```
-
-Keep your personal resume, story bank, and config values unless you explicitly
-want to replace them.
 
 ## 22. Automatically Delete Merged PR Branches
 
