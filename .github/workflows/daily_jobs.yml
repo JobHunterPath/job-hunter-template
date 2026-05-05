@@ -2,8 +2,23 @@ name: Job Hunt Pipeline
 
 on:
   schedule:
-    - cron: '0 6 * * 1-5'   # daily job hunt Mon-Fri 6am UTC
-    - cron: '0 7 * * 1'     # company discovery Mondays 7am UTC
+    # Daily job hunt region slots, Mon-Fri UTC.
+    # Slot 0 starts at 06:00, slot 1 at 07:00, etc. The workflow reads
+    # enabled regions from config/search_config.yml and exits if no region
+    # exists for the current slot.
+    - cron: '0 6 * * 1-5'
+    - cron: '0 7 * * 1-5'
+    - cron: '0 8 * * 1-5'
+    - cron: '0 9 * * 1-5'
+    - cron: '0 10 * * 1-5'
+    - cron: '0 11 * * 1-5'
+    - cron: '0 12 * * 1-5'
+    - cron: '0 13 * * 1-5'
+    - cron: '0 14 * * 1-5'
+    - cron: '0 15 * * 1-5'
+    - cron: '0 16 * * 1-5'
+    - cron: '0 17 * * 1-5'
+    - cron: '0 18 * * 1'     # company discovery Mondays 18:00 UTC
   workflow_dispatch:
     inputs:
       job:
@@ -15,6 +30,15 @@ on:
           - hunt
           - discover
           - both
+      region:
+        description: 'Region key for hunt runs: all, scheduled, or a search_config.yml region such as berlin'
+        required: false
+        default: 'all'
+        type: string
+
+permissions:
+  contents: write
+  packages: read
 
 jobs:
 
@@ -23,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     if: |
-      (github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-5') ||
+      (github.event_name == 'schedule' && github.event.schedule != '0 18 * * 1') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'hunt' || github.event.inputs.job == 'both'))
 
     steps:
@@ -32,30 +56,138 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+      - name: Resolve hunt region
+        id: hunt_region
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule || '' }}
+          INPUT_REGION: ${{ github.event.inputs.region || 'all' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import sys
+          import yaml
+
+          with open("config/search_config.yml", encoding="utf-8") as f:
+              cfg = yaml.safe_load(f) or {}
+
+          regions = [
+              name for name, region in (cfg.get("regions") or {}).items()
+              if region.get("enabled", True)
+          ]
+
+          event_name = os.environ.get("EVENT_NAME", "")
+          schedule = os.environ.get("EVENT_SCHEDULE", "")
+          requested = (os.environ.get("INPUT_REGION") or "all").strip()
+
+          if event_name == "schedule":
+              try:
+                  hour = int(schedule.split()[1])
+              except Exception:
+                  print("should_run=false")
+                  print("reason=Could not resolve scheduled hour")
+                  sys.exit(0)
+
+              slot = hour - 6
+              if slot < 0 or slot >= len(regions):
+                  print("should_run=false")
+                  print(f"reason=No enabled region for schedule slot {slot}")
+                  sys.exit(0)
+
+              region = regions[slot]
+              print("should_run=true")
+              print(f"region={region}")
+              print(f"arg=--region {region}")
+              print(f"label={region}")
+              sys.exit(0)
+
+          if requested.lower() in {"", "all", "*"}:
+              print("should_run=true")
+              print("region=")
+              print("arg=")
+              print("label=all")
+              sys.exit(0)
+
+          if requested.lower() == "scheduled":
+              print("should_run=true")
+              print("region=")
+              print("arg=")
+              print("label=all")
+              sys.exit(0)
+
+          if requested not in regions:
+              print(
+                  f"::error::Unknown or disabled region '{requested}'. "
+                  f"Enabled regions: {', '.join(regions) or '(none)'}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print("should_run=true")
+          print(f"region={requested}")
+          print(f"arg=--region {requested}")
+          print(f"label={requested}")
+          PY
+
+      - name: Skip empty region slot
+        if: steps.hunt_region.outputs.should_run != 'true'
+        run: echo "${{ steps.hunt_region.outputs.reason }}"
+
+      - name: Resolve prebuilt runner image
+        if: steps.hunt_region.outputs.should_run == 'true'
+        id: runner_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNNER_IMAGE_OVERRIDE: ${{ vars.JOB_HUNT_RUNNER_IMAGE }}
+        run: |
+          if [ -n "$RUNNER_IMAGE_OVERRIDE" ]; then
+            image="$RUNNER_IMAGE_OVERRIDE"
+          else
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            image="ghcr.io/${owner}/job-hunt-runner:latest"
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Using prebuilt runner image: $image"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+          fi
+
       - name: Set up Python
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('requirements.txt') }}
 
       - name: Install Python dependencies
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         run: pip install -r requirements.txt
 
       - name: Cache Playwright browsers
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ hashFiles('requirements.txt') }}
 
       - name: Install Playwright browser
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         run: playwright install chromium --with-deps
 
       - name: Start SearXNG
+        if: steps.hunt_region.outputs.should_run == 'true'
         run: |
           if ! docker run -d --name searxng \
             -p 8080:8080 \
@@ -78,6 +210,7 @@ jobs:
           docker logs searxng || true
 
       - name: Install LaTeX
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -89,7 +222,35 @@ jobs:
             texlive-fonts-extra \
             lmodern
 
-      - name: Run daily hunt
+      - name: Run daily hunt in prebuilt runner image
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          SEARXNG_BASE_URL: http://127.0.0.1:8080
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          LOG_LEVEL: INFO
+          RUNNER_IMAGE: ${{ steps.runner_image.outputs.image }}
+        run: |
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e ANTHROPIC_API_KEY \
+            -e BRAVE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e EXA_API_KEY \
+            -e SEARXNG_BASE_URL \
+            -e RAPIDAPI_KEY \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            bash -lc 'PYTHONPATH=/workspace/scripts python scripts/pipeline/orchestrator.py ${{ steps.hunt_region.outputs.arg }}'
+
+      - name: Run daily hunt natively
+        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
@@ -100,22 +261,23 @@ jobs:
           LOG_LEVEL: INFO
         run: |
           cd $GITHUB_WORKSPACE
-          PYTHONPATH=$GITHUB_WORKSPACE/scripts python scripts/pipeline/orchestrator.py
+          PYTHONPATH=$GITHUB_WORKSPACE/scripts python scripts/pipeline/orchestrator.py ${{ steps.hunt_region.outputs.arg }}
 
       - name: Upload logs as artifact
-        if: always()
+        if: always() && steps.hunt_region.outputs.should_run == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: job-hunt-logs-${{ github.run_id }}
+          name: job-hunt-logs-${{ steps.hunt_region.outputs.label }}-${{ github.run_id }}
           path: job_hunt.log
           retention-days: 30
 
       - name: Commit results
+        if: steps.hunt_region.outputs.should_run == 'true'
         run: |
           git config user.name "job-hunt-bot"
           git config user.email "bot@job-hunt"
           git add jobs/ README.md config/applied_jobs.yml
-          git diff --staged --quiet || git commit -m "jobs: $(date +%Y-%m-%d)"
+          git diff --staged --quiet || git commit -m "jobs(${{ steps.hunt_region.outputs.label }}): $(date +%Y-%m-%d)"
           git pull --rebase origin main
           git push
 
@@ -124,7 +286,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: |
-      (github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1') ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 18 * * 1') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'discover' || github.event.inputs.job == 'both'))
 
     steps:

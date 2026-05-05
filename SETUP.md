@@ -775,8 +775,24 @@ When the run finishes, check the `jobs/` folder in your repository.
 The folder starts empty except for `.gitkeep`; each successful run adds one
 subfolder per processed job.
 
-For scheduled daily search, use the **Job Hunt Pipeline** workflow. Run it
-manually once before relying on the schedule.
+For scheduled daily search, use the **Job Hunt Pipeline** workflow. Scheduled
+hunt runs are staggered by enabled region:
+
+- 06:00 UTC runs the first enabled region in `config/search_config.yml`.
+- 07:00 UTC runs the second enabled region.
+- Later hourly slots continue through 17:00 UTC.
+- Empty slots exit quickly if you have fewer enabled regions.
+
+To run a hunt manually:
+
+1. Open **Actions -> Job Hunt Pipeline**.
+2. Click **Run workflow**.
+3. Set `job` to `hunt`.
+4. Set `region` to `all` for every enabled region, or enter one region key such
+   as `berlin`.
+5. Click **Run workflow**.
+
+Run it manually once before relying on the schedule.
 
 ## 20. Review The Output
 
@@ -797,7 +813,69 @@ Inside you may see:
 
 Always review the resume and cover letter before applying.
 
-## 21. Getting Future Template Updates
+## 21. Faster GitHub Actions With The Runner Image
+
+The hunt and tailor-links workflows use a prebuilt GHCR Docker image named
+`job-hunt-runner`. It contains Python, the Python dependencies, Playwright
+Chromium, and LaTeX. This avoids reinstalling LaTeX during every run.
+
+By default, the workflows look for:
+
+```text
+ghcr.io/<your-github-owner>/job-hunt-runner:latest
+```
+
+If your organization provides a shared public image, set a repository variable
+named `JOB_HUNT_RUNNER_IMAGE` to that full image name, for example:
+
+```text
+ghcr.io/job-network-projects/job-hunt-runner:latest
+```
+
+### A. Build The Image Once
+
+After setup, build the image once:
+
+1. Open your repository on GitHub.
+2. Go to **Actions**.
+3. Open **Build Runner Image**.
+4. Click **Run workflow**.
+5. Wait for the workflow to finish.
+
+The image is also rebuilt automatically when `Dockerfile`, `.dockerignore`,
+`requirements.txt`, or the build workflow changes.
+
+If you are using a shared public image through `JOB_HUNT_RUNNER_IMAGE`, you do
+not need to build your own image unless you changed `Dockerfile` or
+`requirements.txt`.
+
+### B. If The Image Is Missing
+
+The daily hunt and tailor-links workflows will still run. They fall back to the
+native install path, which is slower because LaTeX is installed during the job.
+
+If you see a warning that the prebuilt runner image is unavailable:
+
+1. Run **Actions -> Build Runner Image**.
+2. Wait for it to complete.
+3. Re-run **Job Hunt Pipeline** or **Tailor Links**.
+
+### C. GitHub Packages Permission
+
+The workflow publishes the image to GitHub Container Registry using the built-in
+`GITHUB_TOKEN`. If image publishing fails, check:
+
+1. Open your repository on GitHub.
+2. Go to **Settings -> Actions -> General**.
+3. Under **Workflow permissions**, choose **Read and write permissions**.
+4. Save.
+5. Re-run **Build Runner Image**.
+
+The image is large because LaTeX font packages are large. If many users are in
+one organization, prefer one shared public image instead of each user building a
+private copy.
+
+## 22. Getting Future Template Updates
 
 Updates from the original template are not automatic in repositories created
 with **Use this template**. This is intentional: your resume, story bank, jobs,
@@ -945,7 +1023,7 @@ If the merge feels wrong before committing:
 git merge --abort
 ```
 
-## 22. Automatically Delete Merged PR Branches
+## 23. Automatically Delete Merged PR Branches
 
 If you use pull requests in your own repo, GitHub can delete the PR branch after
 the PR is merged.

@@ -48,6 +48,10 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: write
+  packages: read
+
 jobs:
   tailor:
     runs-on: ubuntu-latest
@@ -59,27 +63,55 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+      - name: Resolve prebuilt runner image
+        id: runner_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNNER_IMAGE_OVERRIDE: ${{ vars.JOB_HUNT_RUNNER_IMAGE }}
+        run: |
+          if [ -n "$RUNNER_IMAGE_OVERRIDE" ]; then
+            image="$RUNNER_IMAGE_OVERRIDE"
+          else
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            image="ghcr.io/${owner}/job-hunt-runner:latest"
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Using prebuilt runner image: $image"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+          fi
+
       - name: Set up Python
+        if: steps.runner_image.outputs.available != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip
+        if: steps.runner_image.outputs.available != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('requirements.txt') }}
 
       - name: Install Python dependencies
+        if: steps.runner_image.outputs.available != 'true'
         run: pip install -r requirements.txt
 
       - name: Cache Playwright browsers
+        if: steps.runner_image.outputs.available != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ hashFiles('requirements.txt') }}
 
       - name: Install Playwright browser
+        if: steps.runner_image.outputs.available != 'true'
         run: playwright install chromium --with-deps
 
       - name: Start SearXNG
@@ -105,6 +137,7 @@ jobs:
           docker logs searxng || true
 
       - name: Install LaTeX
+        if: steps.runner_image.outputs.available != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -133,7 +166,35 @@ jobs:
           if [ "${{ github.event.inputs.force }}" = "true" ];         then FLAGS="$FLAGS --force";         fi
           echo "flags=$FLAGS" >> $GITHUB_OUTPUT
 
-      - name: Run tailor-links pipeline
+      - name: Run tailor-links pipeline in prebuilt runner image
+        if: steps.runner_image.outputs.available == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          SEARXNG_BASE_URL: http://127.0.0.1:8080
+          TAILOR_LINKS: ${{ steps.flags.outputs.links }}
+          LOG_LEVEL: INFO
+          RUNNER_IMAGE: ${{ steps.runner_image.outputs.image }}
+        run: |
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e ANTHROPIC_API_KEY \
+            -e BRAVE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e EXA_API_KEY \
+            -e SEARXNG_BASE_URL \
+            -e TAILOR_LINKS \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            bash -lc 'PYTHONPATH=/workspace/scripts python scripts/pipeline/orchestrator.py --mode tailor-links ${{ steps.flags.outputs.flags }}'
+
+      - name: Run tailor-links pipeline natively
+        if: steps.runner_image.outputs.available != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}

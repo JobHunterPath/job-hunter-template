@@ -16,7 +16,12 @@ For future updates, run **Actions -> Update From Template** in your own repo.
 It opens a pull request with the latest maintained template files while keeping
 your resume, story bank, generated jobs, and config files untouched by default.
 After merging that pull request, run `git pull origin main` locally. Detailed
-step-by-step update instructions are in [SETUP.md](SETUP.md#21-getting-future-template-updates).
+step-by-step update instructions are in [SETUP.md](SETUP.md#22-getting-future-template-updates).
+
+The GitHub workflows use a prebuilt GHCR runner image with Python, Playwright,
+and LaTeX already installed. The image is rebuilt automatically when
+`Dockerfile` or `requirements.txt` changes, which avoids spending 10-20 minutes
+installing LaTeX on every job run.
 
 ## Quick Start
 
@@ -34,6 +39,11 @@ step-by-step update instructions are in [SETUP.md](SETUP.md#21-getting-future-te
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
 7. Run tests, then run the pipeline locally or through GitHub Actions.
+
+Scheduled GitHub hunts run enabled regions one hour apart, starting at
+06:00 UTC on weekdays. Manual **Job Hunt Pipeline** runs include a `region`
+field where you can enter `all` or a specific region key from
+`config/search_config.yml`.
 
 ## Search Fallbacks
 
