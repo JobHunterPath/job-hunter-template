@@ -1,52 +1,50 @@
-"""
-Hybrid job scraper: direct ATS APIs where possible, Brave Search as fallback.
+"""Hybrid job scraper.
 
-For each company:
-  1. Detect if career_url belongs to a known ATS (Greenhouse, Lever, SmartRecruiters, Workable).
-  2. If yes → query the ATS API directly (real-time, structured, precise location).
-  3. If no  → fall back to Brave Search with location term in the query.
+The fallback order is intentionally conservative:
+  1. Direct ATS APIs where available.
+  2. Static career-page scraping with requests + BeautifulSoup.
+  3. Playwright rendering for JavaScript-heavy career pages.
+  4. Search providers: SearXNG, Brave, Tavily, Exa.
 """
 
-import os
+import json
 import logging
+import os
 from typing import Optional
 from urllib.parse import urlparse
-import requests
+
+import requests  # kept as a stable test/mock patch point for provider HTTP calls
 import yaml
 
-from core.config import BRAVE_API_KEY, RAPIDAPI_KEY
+from core.config import RAPIDAPI_KEY
 from sources.ats import fetch_ats_jobs
 from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
+from sources.search_providers import (
+    BraveProvider,
+    fetch_playwright_career_jobs,
+    fetch_static_career_jobs,
+    search_web,
+)
 
-# scripts/sources/ → scripts/ → repo root
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
-
 logger = logging.getLogger(__name__)
 
-HEADERS = {
-    "Accept": "application/json",
-    "Accept-Encoding": "gzip",
-    "X-Subscription-Token": BRAVE_API_KEY,
+_LISTING_ONLY_PATHS = {
+    "/jobs", "/careers", "/positions", "/openings", "/vacancies",
+    "/work-with-us", "/join-us",
 }
-
-_LISTING_ONLY_PATHS = {"/jobs", "/careers", "/positions", "/openings", "/vacancies", "/work-with-us", "/join-us"}
 
 
 def load_search_config() -> dict:
     config_file = os.path.join(ROOT, "config", "search_config.yml")
     with open(config_file, encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    logger.info(f"[scraper] Loaded search configuration from {config_file}")
+    logger.info("[scraper] Loaded search configuration from %s", config_file)
     return config
 
 
 def load_companies(region: Optional[str] = None) -> list[dict]:
-    """
-    Load companies from search_config.yml by region.
-    Attaches the region's location to each company so queries can be geo-targeted.
-    Skips companies listed under excluded_companies.
-    """
+    """Load enabled companies from search_config.yml, optionally scoped by region."""
     config = load_search_config()
     excluded = {name.lower() for name in config.get("excluded_companies", [])}
     companies = []
@@ -55,37 +53,47 @@ def load_companies(region: Optional[str] = None) -> list[dict]:
 
     for reg in regions_to_load:
         if reg not in config.get("regions", {}):
-            logger.warning(f"[scraper] Region '{reg}' not found in search_config.yml")
+            logger.warning("[scraper] Region %r not found in search_config.yml", reg)
             continue
 
         region_config = config["regions"][reg]
         if not region_config.get("enabled", True):
-            logger.info(f"[scraper] Region '{reg}' is disabled. Skipping.")
+            logger.info("[scraper] Region %r is disabled. Skipping.", reg)
             continue
 
         location = region_config.get("location", "")
-        region_companies = region_config.get("companies", [])
         loaded = 0
-        for company in region_companies:
+        for company in region_config.get("companies", []):
             if company["name"].lower() in excluded:
-                logger.info(f"[scraper] Skipping excluded company: {company['name']}")
+                logger.info("[scraper] Skipping excluded company: %s", company["name"])
                 continue
-            companies.append({**company, "location": location})
+            companies.append({
+                **company,
+                "region": reg,
+                "location": location,
+                "country": region_config.get("country", ""),
+                "search_lang": region_config.get("search_lang", "en"),
+                "_region_config": region_config,
+            })
             loaded += 1
 
-        logger.info(f"[scraper] Loaded {loaded} companies from region '{reg}' (location={location!r})")
+        logger.info(
+            "[scraper] Loaded %s companies from region %r (location=%r)",
+            loaded,
+            reg,
+            location,
+        )
 
-    logger.info(f"[scraper] Total: {len(companies)} companies")
+    logger.info("[scraper] Total: %s companies", len(companies))
     return companies
 
 
 def build_queries(companies: list[dict], config: dict) -> list[tuple[str, str, str]]:
-    """
-    Build Brave Search queries. Appends the region location to every query.
-    Returns list of (query, company_name, location) tuples.
-    """
+    """Build search queries. Returns (query, company_name, location)."""
     queries = []
-    job_titles = config.get("global_search", {}).get("job_titles", ["Product Owner", "Product Manager"])
+    job_titles = config.get("global_search", {}).get(
+        "job_titles", ["Product Owner", "Product Manager"]
+    )
 
     for company in companies:
         url = company["career_url"]
@@ -98,7 +106,7 @@ def build_queries(companies: list[dict], config: dict) -> list[tuple[str, str, s
                 query += f' "{location}"'
             queries.append((query, name, location or "global"))
 
-    logger.info(f"[scraper] Built {len(queries)} Brave queries for {len(companies)} companies")
+    logger.info("[scraper] Built %s search queries for %s companies", len(queries), len(companies))
     return queries
 
 
@@ -113,14 +121,10 @@ def is_valid_job_url(url: str) -> bool:
         return False
 
     segments = [s for s in path.split("/") if s]
-    if len(segments) < 2:
-        return False
-
-    return True
+    return len(segments) >= 2
 
 
 def is_stale_posting(title: str, snippet: str, config: dict) -> bool:
-    """Return True if the snippet signals the posting is closed or expired."""
     combined = (title + " " + snippet).lower()
     stale_indicators = config.get("exclusion_rules", {}).get("stale_indicators", [])
     return any(indicator in combined for indicator in stale_indicators)
@@ -144,37 +148,53 @@ def is_german(title: str, snippet: str, config: dict) -> bool:
 
 
 def brave_search(query: str, region_config: dict, count: Optional[int] = None) -> list[dict]:
-    if count is None:
-        count = 10
-
-    params = {
-        "q": query,
-        "count": count,
-        "search_lang": region_config.get("search_lang", "en"),
-        "country": region_config.get("country", "DE"),
-        "text_decorations": False,
-        "spellcheck": False,
-    }
-
+    """Compatibility wrapper for tests/tools that call Brave directly."""
+    count = count or 10
     try:
-        resp = requests.get(BRAVE_URL, headers=HEADERS, params=params, timeout=15)
-        resp.raise_for_status()
-        results = resp.json().get("web", {}).get("results", [])
-        logger.debug(f"[scraper] Brave returned {len(results)} results for: {query[:60]}")
-        return results
-    except requests.HTTPError as e:
-        logger.error(f"[scraper] HTTP error during Brave Search: {e}")
-        raise
+        results = BraveProvider().search(query, region_config, count=count)
     except Exception as e:
-        logger.error(f"[scraper] Unexpected error in Brave Search: {e}")
+        logger.error("[scraper] Error during Brave Search: %s", e)
         raise
+    return [
+        {
+            "url": result.url,
+            "title": result.title,
+            "description": result.description,
+            "source": result.source,
+        }
+        for result in results
+    ]
+
+
+def _make_filter(config: dict, seen_urls: set[str], results: list[dict]):
+    def add_job(job: dict) -> bool:
+        if not job.get("url") or job["url"] in seen_urls:
+            return False
+        if is_german(job.get("title", ""), job.get("snippet", ""), config):
+            logger.debug("[skip] German posting: %s", job.get("title", "")[:60])
+            return False
+        if is_too_senior(job.get("title", ""), job.get("snippet", ""), config):
+            logger.debug("[skip] Too senior: %s", job.get("title", "")[:60])
+            return False
+        if is_excluded(job.get("snippet", ""), config):
+            logger.debug("[skip] Excluded industry: %s", job.get("title", "")[:60])
+            return False
+
+        seen_urls.add(job["url"])
+        results.append(job)
+        logger.info(
+            "[found] %s @ %s [%s]",
+            job.get("title", "")[:50],
+            job.get("company", "?"),
+            job.get("source", "?"),
+        )
+        return True
+
+    return add_job
 
 
 def scrape(region: Optional[str] = None) -> list[dict]:
-    """
-    Scrape jobs for all configured companies.
-    Uses direct ATS APIs where available; falls back to Brave Search for others.
-    """
+    """Scrape jobs for configured companies and global boards."""
     config = load_search_config()
     companies = load_companies(region)
 
@@ -184,47 +204,49 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
     global_cfg = config.get("global_search", {})
     title_filters = global_cfg.get("job_titles", ["Product Owner", "Product Manager"])
+    enabled_regions = {
+        name: rc for name, rc in config.get("regions", {}).items()
+        if rc.get("enabled", True)
+    }
 
-    region_config = next(
-        (rc for rc in config.get("regions", {}).values() if rc.get("enabled", True)),
-        {"country": "DE", "search_lang": "en"},
-    )
-
-    results = []
-    seen_urls = set()
+    results: list[dict] = []
+    seen_urls: set[str] = set()
+    add_job = _make_filter(config, seen_urls, results)
 
     for company in companies:
-        location = company.get("location", "")
-
-        # ── Direct ATS API (preferred) ───────────────────────────────────────
-        ats_jobs = fetch_ats_jobs(company, location, title_filters)
-
+        company_region_config = company.get("_region_config") or {
+            "location": company.get("location", ""),
+            "country": company.get("country", ""),
+            "search_lang": company.get("search_lang", "en"),
+        }
+        ats_jobs = fetch_ats_jobs(company, company.get("location", ""), title_filters)
         if ats_jobs is not None:
             for job in ats_jobs:
-                if not job.get("url") or job["url"] in seen_urls:
-                    continue
-                if is_german(job["title"], job["snippet"], config):
-                    logger.debug(f"[skip] German posting: {job['title'][:60]}")
-                    continue
-                if is_too_senior(job["title"], job["snippet"], config):
-                    logger.debug(f"[skip] Too senior: {job['title'][:60]}")
-                    continue
-                if is_excluded(job["snippet"], config):
-                    logger.debug(f"[skip] Excluded industry: {job['title'][:60]}")
-                    continue
-                seen_urls.add(job["url"])
-                results.append(job)
-                logger.info(f"[found] {job['title'][:50]} @ {company['name']} [{job['source']}]")
+                add_job(job)
             continue
 
-        # ── Brave Search fallback (non-ATS career pages) ────────────────────
-        for query, company_name, _ in build_queries([company], config):
-            logger.info(f"[scraper] Brave: {query[:80]}...")
+        direct_found = 0
+        try:
+            for job in fetch_static_career_jobs(company, title_filters):
+                direct_found += int(add_job(job))
+        except Exception as e:
+            logger.debug("[scraper] HTTP career scrape failed for %s: %s", company["name"], e)
 
+        if direct_found == 0:
             try:
-                raw = brave_search(query, region_config, count=10)
+                for job in fetch_playwright_career_jobs(company, title_filters):
+                    direct_found += int(add_job(job))
             except Exception as e:
-                logger.warning(f"[scraper] Brave error for {company_name}: {e}")
+                logger.debug("[scraper] Playwright career scrape failed for %s: %s", company["name"], e)
+
+        if direct_found:
+            continue
+
+        for query, company_name, _ in build_queries([company], config):
+            try:
+                raw = search_web(query, company_region_config, count=10)
+            except Exception as e:
+                logger.warning("[scraper] Search error for %s: %s", company_name, e)
                 continue
 
             filtered_count = 0
@@ -236,76 +258,57 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 if not url or url in seen_urls:
                     continue
                 if not is_valid_job_url(url):
-                    logger.debug(f"[skip] Not a job posting URL: {url[:80]}")
+                    logger.debug("[skip] Not a job posting URL: %s", url[:80])
                     filtered_count += 1
                     continue
                 if is_stale_posting(title, snippet, config):
-                    logger.debug(f"[skip] Stale/closed posting: {title[:60]}")
+                    logger.debug("[skip] Stale/closed posting: %s", title[:60])
                     filtered_count += 1
                     continue
-                if is_german(title, snippet, config):
-                    logger.debug(f"[skip] German posting: {title[:60]}")
-                    filtered_count += 1
-                    continue
-                if is_too_senior(title, snippet, config):
-                    logger.debug(f"[skip] Too senior: {title[:60]}")
-                    filtered_count += 1
-                    continue
-                if is_excluded(snippet, config):
-                    logger.debug(f"[skip] Excluded industry: {title[:60]}")
-                    filtered_count += 1
-                    continue
-                seen_urls.add(url)
-                results.append({
+
+                add_job({
                     "title": title,
                     "company": company_name,
                     "url": url,
                     "posted": "",
                     "snippet": snippet,
-                    "source": "Brave/ATS",
+                    "source": item.get("source", "Search fallback"),
                     "query": query,
                 })
-                logger.info(f"[found] {title[:50]} @ {company_name} [Brave]")
 
             if filtered_count > 0:
-                logger.debug(f"[scraper] Filtered {filtered_count} ineligible results from {company_name}")
+                logger.debug("[scraper] Filtered %s ineligible results from %s", filtered_count, company_name)
 
-    # ── Global job boards (Arbeitnow + JSearch) ─────────────────────────────
-    board_location = region_config.get("location", "")
     boards_cfg = config.get("job_boards", {})
 
-    def _add_global_jobs(global_jobs: list[dict]) -> None:
-        for job in global_jobs:
-            if not job.get("url") or job["url"] in seen_urls:
-                continue
-            if is_german(job["title"], job["snippet"], config):
-                logger.debug(f"[skip] German posting: {job['title'][:60]}")
-                continue
-            if is_too_senior(job["title"], job["snippet"], config):
-                logger.debug(f"[skip] Too senior: {job['title'][:60]}")
-                continue
-            if is_excluded(job["snippet"], config):
-                logger.debug(f"[skip] Excluded industry: {job['title'][:60]}")
-                continue
-            seen_urls.add(job["url"])
-            results.append(job)
-            logger.info(f"[found] {job['title'][:50]} @ {job.get('company', '?')} [{job['source']}]")
+    for region_name, region_config in enabled_regions.items():
+        board_location = region_config.get("location", "")
+        if boards_cfg.get("arbeitnow", {}).get("enabled", False):
+            max_pages = boards_cfg["arbeitnow"].get("max_pages", 3)
+            logger.info(
+                "[scraper] Arbeitnow: region=%r, location=%r, max_pages=%s",
+                region_name,
+                board_location,
+                max_pages,
+            )
+            for job in fetch_arbeitnow_jobs(title_filters, board_location, max_pages):
+                add_job(job)
 
-    if boards_cfg.get("arbeitnow", {}).get("enabled", False):
-        max_pages = boards_cfg["arbeitnow"].get("max_pages", 3)
-        logger.info(f"[scraper] Arbeitnow: location={board_location!r}, max_pages={max_pages}")
-        _add_global_jobs(fetch_arbeitnow_jobs(title_filters, board_location, max_pages))
+        if boards_cfg.get("jsearch", {}).get("enabled", False):
+            num_pages = boards_cfg["jsearch"].get("num_pages", 1)
+            logger.info(
+                "[scraper] JSearch: region=%r, location=%r, titles=%s",
+                region_name,
+                board_location,
+                title_filters,
+            )
+            for job in fetch_jsearch_jobs(title_filters, board_location, RAPIDAPI_KEY, num_pages):
+                add_job(job)
 
-    if boards_cfg.get("jsearch", {}).get("enabled", False):
-        num_pages = boards_cfg["jsearch"].get("num_pages", 1)
-        logger.info(f"[scraper] JSearch: location={board_location!r}, titles={title_filters}")
-        _add_global_jobs(fetch_jsearch_jobs(title_filters, board_location, RAPIDAPI_KEY, num_pages))
-
-    logger.info(f"[scraper] Complete: {len(results)} jobs found")
+    logger.info("[scraper] Complete: %s jobs found", len(results))
     return results
 
 
 if __name__ == "__main__":
-    import json
     jobs = scrape()
     print(json.dumps(jobs, indent=2))

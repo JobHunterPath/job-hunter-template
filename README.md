@@ -1,7 +1,10 @@
 # Job Hunt Automation Template
 
 This repository automates job discovery across multiple locations, fit scoring, resume tailoring, cover
-letter generation, and PDF output for a configurable job search.
+letter generation, and PDF output for a configurable job search. The scraper
+uses direct ATS APIs first, then HTTP/BeautifulSoup, Playwright, an ephemeral
+SearXNG container in GitHub Actions, and optional search APIs such as Brave,
+Tavily, and Exa.
 
 ## Start Here
 
@@ -25,6 +28,26 @@ story bank, configure job search, and run the automation from GitHub.
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
 7. Run tests, then run the pipeline locally or through GitHub Actions.
+
+## Search Fallbacks
+
+Search APIs are optional except for the LLM provider you choose. After direct
+ATS, HTTP/BeautifulSoup, and Playwright scraping, the default search-provider
+fallback order is configured in `config/api_config.yml`:
+
+```yaml
+http:
+  search_providers:
+    order:
+      - searxng
+      - brave
+      - tavily
+      - exa
+```
+
+GitHub Actions starts SearXNG temporarily for each hunt, discovery, and
+tailor-links job. If SearXNG or any API provider fails, the pipeline continues
+with the next available option.
 
 ## Local Run
 

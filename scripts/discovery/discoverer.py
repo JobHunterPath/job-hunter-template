@@ -1,5 +1,5 @@
 """
-Weekly job: discovers new companies via an LLM + Brave,
+Weekly job: discovers new companies via an LLM + search provider fallbacks,
 validates their career pages exist, and adds them to search_config.yml regions.
 Deduplicates against existing entries automatically.
 """
@@ -7,22 +7,15 @@ Deduplicates against existing entries automatically.
 import os
 import re
 import json
-import requests
 import yaml
 
-from core.config import BRAVE_API_KEY, load_api_config
+from core.config import load_api_config
 from core.llm_client import get_llm_client
+from sources.search_providers import search_career_urls, search_web
 
 # scripts/discovery/ → scripts/ → repo root
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SEARCH_CONFIG_FILE = os.path.join(ROOT, "config", "search_config.yml")
-
-BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
-BRAVE_HEADERS = {
-    "Accept": "application/json",
-    "Accept-Encoding": "gzip",
-    "X-Subscription-Token": BRAVE_API_KEY,
-}
 
 # ATS URL patterns and the canonical career_url format to store in search_config.yml.
 # Order matters: more specific patterns first.
@@ -139,11 +132,12 @@ def load_companies() -> tuple[list[dict], set[str]]:
     return companies, excluded
 
 
-def has_jobs_in_location(company_name: str, location: str) -> bool:
+def has_jobs_in_location(company_name: str, region_config: dict) -> bool:
     """Check if a company has job postings in a specific location."""
+    location = region_config.get("location", "")
     query = f'"{company_name}" "{location}" "Product Manager" OR "Product Owner" site:jobs OR site:careers'
     try:
-        results = brave_search(query, count=3)
+        results = search_web(query, region_config, count=3)
         for result in results:
             url = result.get("url", "").lower()
             if company_name.lower() in url and (location.lower() in url or 'jobs' in url or 'careers' in url):
@@ -213,24 +207,14 @@ def discover_company_names(existing: list[dict], location: str) -> list[str]:
     return all_names
 
 
-def brave_search(query: str, count: int = 5) -> list[dict]:
-    params = {
-        "q": query,
-        "count": count,
-        "search_lang": "en",
-        "country": "DE",
-        "text_decorations": False,
-    }
-    resp = requests.get(
-        BRAVE_URL, headers=BRAVE_HEADERS, params=params, timeout=15
-    )
-    resp.raise_for_status()
-    return resp.json().get("web", {}).get("results", [])
+def brave_search(query: str, count: int = 5, region_config: dict | None = None) -> list[dict]:
+    """Compatibility wrapper; now uses the full search provider chain."""
+    return search_web(region_config=region_config or {}, query=query, count=count)
 
 
-def find_career_url(company_name: str, existing_urls: set[str], location: str) -> dict | None:
+def find_career_url(company_name: str, existing_urls: set[str], region_config: dict) -> dict | None:
     """
-    Search Brave for the company's career page.
+    Search provider fallbacks for the company's career page.
 
     Two passes:
       1. ATS-targeted query across all supported platforms.
@@ -238,44 +222,34 @@ def find_career_url(company_name: str, existing_urls: set[str], location: str) -
 
     Returns a dict with name + career_url if found, None otherwise.
     """
-    ats_sites = (
-        "site:boards.greenhouse.io OR site:job-boards.greenhouse.io "
-        "OR site:jobs.lever.co OR site:jobs.smartrecruiters.com "
-        "OR site:apply.workable.com OR site:jobs.ashbyhq.com "
-        "OR site:careers.hibob.com OR site:recruitee.com "
-        "OR site:jobs.personio.de OR site:jobs.personio.com"
-    )
-    ats_query = f'"{company_name}" {location} {ats_sites}'
-    broad_query = f'"{company_name}" {location} "Product Manager" OR "Product Owner" careers jobs'
+    location = region_config.get("location", "")
+    try:
+        results = search_career_urls(company_name, region_config, count=7)
+    except Exception as e:
+        print(f"  [search] Error searching for {company_name}: {e}")
+        results = []
 
-    for query in (ats_query, broad_query):
-        try:
-            results = brave_search(query, count=7)
-        except Exception as e:
-            print(f"  [brave] Error searching for {company_name}: {e}")
-            continue
+    for result in results:
+        url = result.get("url", "")
 
-        for result in results:
-            url = result.get("url", "")
+        for pattern, template in ATS_PATTERNS:
+            match = re.search(pattern, url)
+            if match:
+                slug = match.group(1).rstrip("/")
+                career_url = template.format(slug=slug)
+                if career_url.lower() not in existing_urls:
+                    print(f"  [found] {company_name} -> {career_url} (ATS)")
+                    return {"name": company_name, "career_url": career_url}
 
-            for pattern, template in ATS_PATTERNS:
-                match = re.search(pattern, url)
-                if match:
-                    slug = match.group(1).rstrip("/")
-                    career_url = template.format(slug=slug)
+        for path in CAREER_PATH_PATTERNS:
+            if path in url.lower():
+                domain_match = re.match(r"https?://([^/]+)", url)
+                if domain_match:
+                    domain = domain_match.group(1)
+                    career_url = f"{domain}{path}"
                     if career_url.lower() not in existing_urls:
-                        print(f"  [found] {company_name} -> {career_url} (ATS)")
+                        print(f"  [found] {company_name} -> {career_url} (direct)")
                         return {"name": company_name, "career_url": career_url}
-
-            for path in CAREER_PATH_PATTERNS:
-                if path in url.lower():
-                    domain_match = re.match(r"https?://([^/]+)", url)
-                    if domain_match:
-                        domain = domain_match.group(1)
-                        career_url = f"{domain}{path}"
-                        if career_url.lower() not in existing_urls:
-                            print(f"  [found] {company_name} -> {career_url} (direct)")
-                            return {"name": company_name, "career_url": career_url}
 
     print(f"  [miss] No career page found for {company_name}")
     return None
@@ -301,11 +275,9 @@ def run():
     regions = {k: v for k, v in search_config.get("regions", {}).items() if v.get("enabled", True)}
 
     if not regions:
-        print("[discover] No enabled regions found in search_config.yml. Defaulting to Berlin.")
-        regions = {"berlin": {"location": "Berlin", "country": "DE"}}
-        search_config["regions"] = regions
+        print("[discover] No enabled regions found in search_config.yml. Nothing to discover.")
+        return
 
-    all_new_entries = []
     region_discoveries = {}  # Track which region discovered which companies
 
     for region_name, region_config in regions.items():
@@ -332,7 +304,7 @@ def run():
         new_entries = []
         for name in new_names:
             print(f"[discover] Looking up: {name}")
-            entry = find_career_url(name, existing_urls, location)
+            entry = find_career_url(name, existing_urls, region_config)
             if entry:
                 new_entries.append(entry)
                 existing_urls.add(entry["career_url"].lower())
@@ -363,8 +335,7 @@ def run():
                 for other_region, other_config in regions.items():
                     if other_region == region_name:
                         continue
-                    location = other_config.get("location", other_region.title())
-                    if has_jobs_in_location(company["name"], location):
+                    if has_jobs_in_location(company["name"], other_config):
                         add_company_to_region(search_config, other_region, company)
 
     if not any(search_config["regions"][r].get("companies", []) for r in regions.keys()):
@@ -374,7 +345,6 @@ def run():
     # Save updated search_config
     save_search_config(search_config)
 
-    total_new = sum(len(search_config["regions"].get(r, {}).get("companies", [])) for r in regions.keys())
     print(f"\n[discover] Discovery complete. search_config.yml now has companies across {len(regions)} regions")
 
 
