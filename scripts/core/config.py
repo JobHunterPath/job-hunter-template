@@ -130,7 +130,15 @@ _secrets = _API_CFG.get("secrets", {})
 
 BRAVE_API_KEY = get_secret(
     _secrets.get("brave", {}).get("env_var", "BRAVE_API_KEY"),
-    required=_secrets.get("brave", {}).get("required", True),
+    required=_secrets.get("brave", {}).get("required", False),
+)
+TAVILY_API_KEY = get_secret(
+    _secrets.get("tavily", {}).get("env_var", "TAVILY_API_KEY"),
+    required=_secrets.get("tavily", {}).get("required", False),
+)
+EXA_API_KEY = get_secret(
+    _secrets.get("exa", {}).get("env_var", "EXA_API_KEY"),
+    required=_secrets.get("exa", {}).get("required", False),
 )
 RAPIDAPI_KEY = get_secret(
     _secrets.get("rapidapi", {}).get("env_var", "RAPIDAPI_KEY"),

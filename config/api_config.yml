@@ -38,7 +38,13 @@ secrets:
     required: false
   brave:
     env_var: "BRAVE_API_KEY"
-    required: true
+    required: false
+  tavily:
+    env_var: "TAVILY_API_KEY"
+    required: false
+  exa:
+    env_var: "EXA_API_KEY"
+    required: false
   rapidapi:
     env_var: "RAPIDAPI_KEY"
     required: false
@@ -50,6 +56,13 @@ http:
   brave_search:
     timeout_seconds: 15
     results_per_query: 10
+  search_providers:
+    order:
+      - searxng
+      - brave
+      - tavily
+      - exa
+    searxng_base_url: "http://127.0.0.1:8080"
   ats_scraper:
     timeout_seconds: 10
   job_boards:

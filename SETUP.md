@@ -378,7 +378,7 @@ if you want stricter filtering.
 The automation needs two kinds of services:
 
 - an LLM provider for validation, scoring, tailoring, and cover letters
-- Brave Search for finding jobs on the web
+- optional search providers for broad discovery when direct scraping is not enough
 
 You can use a cloud LLM provider, or you can run a local LLM with Ollama.
 
@@ -541,9 +541,25 @@ Important: GitHub-hosted Actions cannot use Ollama running on your laptop. If
 you want scheduled GitHub Actions, use a cloud provider such as Anthropic,
 OpenAI, or Google, or set up your own self-hosted runner.
 
-### Brave Search API
+### Search Providers For Discovery And Scraping
 
-Brave Search is used to discover jobs from web search.
+The pipeline does not depend on one search API. It tries direct ATS APIs,
+HTTP/BeautifulSoup scraping, Playwright rendering, a temporary SearXNG container
+inside GitHub Actions, and then whichever external APIs you configure.
+
+SearXNG needs no key. The workflows start it from this repo using
+`.github/searxng/settings.yml` and expose it at:
+
+```text
+http://127.0.0.1:8080
+```
+
+If SearXNG cannot start or an upstream search engine throttles it, the pipeline
+continues with the other providers.
+
+### Brave Search API, Optional
+
+Brave Search can be used to discover jobs from web search.
 
 1. Go to `https://brave.com/search/api/`.
 2. Create an account.
@@ -554,6 +570,30 @@ Use this secret name:
 
 ```text
 BRAVE_API_KEY
+```
+
+### Tavily, Optional
+
+1. Go to `https://tavily.com/`.
+2. Create a free account.
+3. Copy your API key from the dashboard.
+
+Use this secret name:
+
+```text
+TAVILY_API_KEY
+```
+
+### Exa, Optional
+
+1. Go to `https://exa.ai/`.
+2. Create a free account.
+3. Copy your API key from the dashboard.
+
+Use this secret name:
+
+```text
+EXA_API_KEY
 ```
 
 ### RapidAPI / JSearch, Optional
@@ -585,6 +625,8 @@ PowerShell on Windows:
 ```powershell
 $env:ANTHROPIC_API_KEY="paste-your-key-here"
 $env:BRAVE_API_KEY="paste-your-key-here"
+$env:TAVILY_API_KEY="paste-your-key-here"
+$env:EXA_API_KEY="paste-your-key-here"
 ```
 
 macOS/Linux:
@@ -592,6 +634,8 @@ macOS/Linux:
 ```bash
 export ANTHROPIC_API_KEY="paste-your-key-here"
 export BRAVE_API_KEY="paste-your-key-here"
+export TAVILY_API_KEY="paste-your-key-here"
+export EXA_API_KEY="paste-your-key-here"
 ```
 
 Use `OPENAI_API_KEY` or `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY` if you
@@ -613,6 +657,8 @@ Then paste the lines you need:
 import keyring
 keyring.set_password("job-hunt", "ANTHROPIC_API_KEY", "paste-your-key-here")
 keyring.set_password("job-hunt", "BRAVE_API_KEY", "paste-your-key-here")
+keyring.set_password("job-hunt", "TAVILY_API_KEY", "paste-your-key-here")
+keyring.set_password("job-hunt", "EXA_API_KEY", "paste-your-key-here")
 keyring.set_password("job-hunt", "RAPIDAPI_KEY", "paste-your-key-here")
 ```
 
@@ -704,7 +750,9 @@ Add the secrets you use:
 - `ANTHROPIC_API_KEY`: required if using Anthropic.
 - `OPENAI_API_KEY`: required if using OpenAI.
 - `GOOGLE_API_KEY`: required if using Google Gemini.
-- `BRAVE_API_KEY`: required for Brave Search.
+- `BRAVE_API_KEY`: optional search fallback.
+- `TAVILY_API_KEY`: optional search fallback.
+- `EXA_API_KEY`: optional search fallback.
 - `RAPIDAPI_KEY`: optional, only if using JSearch.
 - `GH_PAT`: required for GitHub Actions to commit generated files back to your repository.
 
