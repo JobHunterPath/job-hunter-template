@@ -12,6 +12,12 @@ For initial setup, read [SETUP.md](SETUP.md) first. It walks through the
 process step by step, including how to choose a resume layout, fill in your
 story bank, configure job search, and run the automation from GitHub.
 
+For future updates, run **Actions -> Update From Template** in your own repo.
+It opens a pull request with the latest maintained template files while keeping
+your resume, story bank, generated jobs, and config files untouched by default.
+After merging that pull request, run `git pull origin main` locally. Detailed
+step-by-step update instructions are in [SETUP.md](SETUP.md#21-getting-future-template-updates).
+
 ## Quick Start
 
 1. Choose and customize a LaTeX resume:

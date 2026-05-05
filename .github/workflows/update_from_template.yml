@@ -1,0 +1,125 @@
+name: Update From Template
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_repo:
+        description: "Template repository to pull updates from"
+        required: true
+        default: "Job-Network-Projects/job-hunter-template"
+        type: string
+      upstream_branch:
+        description: "Template branch to pull updates from"
+        required: true
+        default: "main"
+        type: string
+      update_config:
+        description: "Also update config files from the template"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Copy template updates into a pull request branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          UPDATE_CONFIG: ${{ inputs.update_config }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "template-update-bot"
+          git config user.email "template-update-bot@users.noreply.github.com"
+
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+          branch="template-update/${GITHUB_RUN_ID}"
+          git checkout -b "$branch"
+
+          paths=(
+            ".github/searxng"
+            ".github/workflows/daily_jobs.yml"
+            ".github/workflows/tailor_links.yml"
+            ".github/workflows/update_from_template.yml"
+            ".gitignore"
+            "README.md"
+            "SETUP.md"
+            "altacv.cls"
+            "requirements.txt"
+            "scripts"
+            "tests"
+          )
+
+          if [ "$UPDATE_CONFIG" = "true" ]; then
+            paths+=("config")
+          fi
+
+          git checkout "upstream/${UPSTREAM_BRANCH}" -- "${paths[@]}"
+
+          if git diff --cached --quiet; then
+            echo "This repository already has the selected template files."
+            exit 0
+          fi
+
+          git add "${paths[@]}"
+          git commit -m "chore: update from job hunt template"
+          git push --force-with-lease origin "$branch"
+
+          upstream_version="$(git show "upstream/${UPSTREAM_BRANCH}:VERSION" 2>/dev/null || true)"
+          changelog_excerpt="$(git show "upstream/${UPSTREAM_BRANCH}:CHANGELOG.md" 2>/dev/null | sed -n '1,35p' || true)"
+
+          pr_body="$(mktemp)"
+          {
+            echo "This PR updates the maintained template files from \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`."
+            echo
+            if [ -n "$upstream_version" ]; then
+              echo "Template version: \`${upstream_version}\`"
+              echo
+            fi
+            echo "Personal files are preserved by default:"
+            echo
+            echo "- resumes"
+            echo "- story bank"
+            echo "- project instructions"
+            echo "- generated jobs"
+            echo "- config files, unless \`update_config\` was enabled"
+            echo
+            echo "Review the changed files, then merge this PR when ready."
+            if [ -n "$changelog_excerpt" ]; then
+              echo
+              echo "Recent template changelog:"
+              echo
+              echo '```markdown'
+              echo "$changelog_excerpt"
+              echo '```'
+            fi
+          } > "$pr_body"
+
+          existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" --title "chore: update from job hunt template" --body-file "$pr_body"
+            echo "Updated existing PR #$existing_pr."
+          else
+            gh pr create \
+              --base "${GITHUB_REF_NAME}" \
+              --head "$branch" \
+              --title "chore: update from job hunt template" \
+              --body-file "$pr_body"
+          fi
