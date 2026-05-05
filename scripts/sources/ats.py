@@ -8,7 +8,10 @@ import logging
 from datetime import datetime
 import requests
 
+from core.config import get_timeout
 from core.utils import strip_html, location_matches, title_matches
+
+_TIMEOUT = get_timeout("ats_scraper")
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +51,7 @@ def fetch_greenhouse_jobs(
         resp = requests.get(
             f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
             params={"content": "true"},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         all_jobs = resp.json().get("jobs", [])
@@ -93,7 +96,7 @@ def fetch_lever_jobs(
         resp = requests.get(
             f"https://api.lever.co/v0/postings/{slug}",
             params={"mode": "json"},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json()
@@ -156,7 +159,7 @@ def fetch_smartrecruiters_jobs(
         resp = requests.get(
             f"https://api.smartrecruiters.com/v1/companies/{slug}/postings",
             params=params,
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("content", [])
@@ -184,7 +187,7 @@ def fetch_smartrecruiters_jobs(
             try:
                 detail = requests.get(
                     f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{posting_id}",
-                    timeout=15,
+                    timeout=_TIMEOUT,
                 )
                 if detail.status_code == 200:
                     sections = detail.json().get("jobAd", {}).get("sections", [])
@@ -219,7 +222,7 @@ def fetch_workable_jobs(
         resp = requests.post(
             f"https://apply.workable.com/api/v3/accounts/{slug}/jobs",
             json={"query": "", "location": [location_filter] if location_filter else []},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("results", [])
@@ -261,7 +264,7 @@ def fetch_ashby_jobs(
         resp = requests.post(
             f"https://api.ashbyhq.com/posting-api/job-board/{slug}",
             json={},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("jobPostings", [])

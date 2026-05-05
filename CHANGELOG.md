@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3 - 2026-05-05
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `6b06103` fix: enforce config-driven filtering, timeouts, and model settings
+
+
 ## 1.0.2 - 2026-05-05
 
 - Synced reusable template updates from the private source repository.

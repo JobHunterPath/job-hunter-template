@@ -13,7 +13,10 @@ import logging
 from datetime import datetime, timezone
 import requests
 
+from core.config import get_timeout
 from core.utils import strip_html, location_matches, title_matches
+
+_TIMEOUT = get_timeout("job_boards")
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +102,7 @@ def fetch_jsearch_jobs(
         "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
     }
 
-    titles = title_filters or ["Product Manager", "Product Owner"]
+    titles = title_filters or ["Product Owner", "Product Manager"]
     jobs = []
 
     for title in titles:
@@ -117,7 +120,7 @@ def fetch_jsearch_jobs(
                         "country": "de",
                         "language": "en",
                     },
-                    timeout=15,
+                    timeout=_TIMEOUT,
                 )
                 resp.raise_for_status()
                 data = resp.json().get("data", [])
