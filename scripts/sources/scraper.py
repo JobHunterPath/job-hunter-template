@@ -17,6 +17,7 @@ import requests  # kept as a stable test/mock patch point for provider HTTP call
 import yaml
 
 from core.config import RAPIDAPI_KEY
+from core.utils import title_matches
 from sources.ats import fetch_ats_jobs
 from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
 from sources.search_providers import (
@@ -166,9 +167,12 @@ def brave_search(query: str, region_config: dict, count: Optional[int] = None) -
     ]
 
 
-def _make_filter(config: dict, seen_urls: set[str], results: list[dict]):
+def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str]):
     def add_job(job: dict) -> bool:
         if not job.get("url") or job["url"] in seen_urls:
+            return False
+        if title_filters and not title_matches(job.get("title", ""), title_filters):
+            logger.debug("[skip] Title not in filters: %s", job.get("title", "")[:60])
             return False
         if is_german(job.get("title", ""), job.get("snippet", ""), config):
             logger.debug("[skip] German posting: %s", job.get("title", "")[:60])
@@ -217,7 +221,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
     results: list[dict] = []
     seen_urls: set[str] = set()
-    add_job = _make_filter(config, seen_urls, results)
+    add_job = _make_filter(config, seen_urls, results, title_filters)
 
     for company in companies:
         company_region_config = company.get("_region_config") or {

@@ -22,6 +22,7 @@ from core.config import (
     BRAVE_API_KEY,
     EXA_API_KEY,
     TAVILY_API_KEY,
+    get_timeout,
     load_api_config,
 )
 
@@ -63,9 +64,8 @@ class SearchProvider:
         raise NotImplementedError
 
 
-def _timeout(section: str, default: int = 15) -> int:
-    http_cfg = load_api_config().get("http", {})
-    return int(http_cfg.get(section, {}).get("timeout_seconds", default))
+def _timeout(section: str) -> int:
+    return get_timeout(section)
 
 
 def _search_cfg() -> dict:

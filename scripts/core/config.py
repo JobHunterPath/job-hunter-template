@@ -145,6 +145,14 @@ RAPIDAPI_KEY = get_secret(
     required=_secrets.get("rapidapi", {}).get("required", False),
 )
 
+def get_timeout(section: str) -> int:
+    """Return http.<section>.timeout_seconds from api_config.yml."""
+    value = _API_CFG.get("http", {}).get(section, {}).get("timeout_seconds")
+    if value is None:
+        raise KeyError(f"Missing api_config.yml key: http.{section}.timeout_seconds")
+    return int(value)
+
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logger = setup_logging(
     log_level=os.environ.get("LOG_LEVEL", "INFO"),
