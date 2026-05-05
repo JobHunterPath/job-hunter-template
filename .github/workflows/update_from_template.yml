@@ -55,10 +55,13 @@ jobs:
 
           paths=(
             ".github/searxng"
+            ".github/workflows/build_runner_image.yml"
             ".github/workflows/daily_jobs.yml"
             ".github/workflows/tailor_links.yml"
             ".github/workflows/update_from_template.yml"
+            ".dockerignore"
             ".gitignore"
+            "Dockerfile"
             "README.md"
             "SETUP.md"
             "altacv.cls"

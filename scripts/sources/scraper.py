@@ -204,10 +204,16 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
     global_cfg = config.get("global_search", {})
     title_filters = global_cfg.get("job_titles", ["Product Owner", "Product Manager"])
-    enabled_regions = {
-        name: rc for name, rc in config.get("regions", {}).items()
-        if rc.get("enabled", True)
-    }
+    if region:
+        region_cfg = config.get("regions", {}).get(region)
+        enabled_regions = {
+            region: region_cfg
+        } if region_cfg and region_cfg.get("enabled", True) else {}
+    else:
+        enabled_regions = {
+            name: rc for name, rc in config.get("regions", {}).items()
+            if rc.get("enabled", True)
+        }
 
     results: list[dict] = []
     seen_urls: set[str] = set()

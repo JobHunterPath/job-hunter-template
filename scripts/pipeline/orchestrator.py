@@ -12,6 +12,7 @@ Two modes, one entry point:
 
 Usage:
   python scripts/pipeline/orchestrator.py
+  python scripts/pipeline/orchestrator.py --region berlin
   python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://url1, https://url2"
   python scripts/pipeline/orchestrator.py --mode tailor-links --skip-score --force
 """
@@ -117,9 +118,9 @@ def update_readme(matches: List[dict]) -> None:
 
 # ── Job sources ────────────────────────────────────────────────────────────────
 
-def _jobs_from_hunt() -> tuple[list[dict], set, set]:
+def _jobs_from_hunt(region: str | None = None) -> tuple[list[dict], set, set]:
     """Scrape configured companies/boards, then deduplicate against processed jobs."""
-    jobs = scrape()
+    jobs = scrape(region=region)
     if not jobs:
         return [], set(), set()
     new_jobs, existing_urls, existing_titles = filter_new_jobs(jobs)
@@ -369,6 +370,7 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   python scripts/pipeline/orchestrator.py
+  python scripts/pipeline/orchestrator.py --region berlin
   python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://url1, https://url2"
   python scripts/pipeline/orchestrator.py --mode tailor-links --skip-score --force
         """,
@@ -385,6 +387,11 @@ Examples:
         help="Comma-separated job URLs for tailor-links mode. "
              "Falls back to TAILOR_LINKS env var if omitted.",
     )
+    p.add_argument(
+        "--region",
+        help="Optional search_config.yml region key for hunt mode, e.g. berlin. "
+             "Omit to scrape all enabled regions.",
+    )
     p.add_argument("--skip-score",    action="store_true", help="Bypass scoring threshold")
     p.add_argument("--skip-validate", action="store_true", help="Bypass validation checks")
     p.add_argument("--force",         action="store_true", help="Re-process already-tracked jobs")
@@ -393,7 +400,8 @@ Examples:
 
 def run(args: argparse.Namespace) -> int:
     logger.info(f"\n{'='*60}")
-    logger.info(f"Pipeline | mode={args.mode} | {TODAY}")
+    region_label = args.region if args.mode == "hunt" and args.region else "all"
+    logger.info(f"Pipeline | mode={args.mode} | region={region_label} | {TODAY}")
     logger.info(f"{'='*60}")
 
     api_cfg = load_api_config()
@@ -405,7 +413,7 @@ def run(args: argparse.Namespace) -> int:
     # ── Source jobs ────────────────────────────────────────────────────────────
     if args.mode == "hunt":
         logger.info("[pipeline] Step 1: Scraping and deduplicating jobs...")
-        jobs, existing_urls, existing_titles = _jobs_from_hunt()
+        jobs, existing_urls, existing_titles = _jobs_from_hunt(args.region)
         if not jobs:
             logger.warning("[pipeline] No new jobs found. Exiting.")
             return 2
