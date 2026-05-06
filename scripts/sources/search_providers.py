@@ -12,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass
 from html import unescape
-from typing import Iterable, Optional
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -22,8 +22,10 @@ from core.config import (
     BRAVE_API_KEY,
     EXA_API_KEY,
     TAVILY_API_KEY,
+    get_timeout,
     load_api_config,
 )
+from core.utils import title_matches
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ EXA_URL = "https://api.exa.ai/search"
 
 JOB_HINTS = (
     "job", "jobs", "career", "careers", "position", "positions", "opening",
-    "openings", "vacancy", "vacancies", "product-manager", "product-owner",
+    "openings", "vacancy", "vacancies",
 )
 
 
@@ -63,9 +65,8 @@ class SearchProvider:
         raise NotImplementedError
 
 
-def _timeout(section: str, default: int = 15) -> int:
-    http_cfg = load_api_config().get("http", {})
-    return int(http_cfg.get(section, {}).get("timeout_seconds", default))
+def _timeout(section: str) -> int:
+    return get_timeout(section)
 
 
 def _search_cfg() -> dict:
@@ -85,11 +86,6 @@ def _text(value: object) -> str:
 def _looks_like_job_url(url: str) -> bool:
     lower = url.lower()
     return any(hint in lower for hint in JOB_HINTS)
-
-
-def _wanted_title(text: str, title_filters: Iterable[str]) -> bool:
-    lower = text.lower()
-    return any(title.lower() in lower for title in title_filters)
 
 
 def _location_match(text: str, location: str) -> bool:
@@ -143,9 +139,10 @@ class SearxngProvider(SearchProvider):
         params = {
             "q": query,
             "format": "json",
-            "language": region_config.get("search_lang", "en"),
             "safesearch": 0,
         }
+        if region_config.get("search_lang"):
+            params["language"] = region_config["search_lang"]
         resp = requests.get(
             f"{self.base_url}/search",
             params=params,
@@ -167,10 +164,11 @@ class BraveProvider(SearchProvider):
         params = {
             "q": query,
             "count": count,
-            "search_lang": region_config.get("search_lang", "en"),
             "text_decorations": False,
             "spellcheck": False,
         }
+        if region_config.get("search_lang"):
+            params["search_lang"] = region_config["search_lang"]
         if region_config.get("country"):
             params["country"] = region_config["country"]
         resp = requests.get(
@@ -288,6 +286,7 @@ def extract_jobs_from_html(
     title_filters: list[str],
     location: str,
     source: str,
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     jobs: list[dict] = []
@@ -303,9 +302,11 @@ def extract_jobs_from_html(
         )
         haystack = f"{text} {href} {context}"
 
-        if not _looks_like_job_url(url) and not _wanted_title(haystack, title_filters):
+        title_text = text or next((t for t in title_filters if t.lower() in haystack.lower()), "")
+
+        if not _looks_like_job_url(url) and not title_matches(title_text or haystack, title_filters, excluded_title_terms):
             continue
-        if not _wanted_title(haystack, title_filters):
+        if not title_matches(title_text or haystack, title_filters, excluded_title_terms):
             continue
         if not _location_match(haystack, location):
             continue
@@ -325,7 +326,11 @@ def extract_jobs_from_html(
     return jobs
 
 
-def fetch_static_career_jobs(company: dict, title_filters: list[str]) -> list[dict]:
+def fetch_static_career_jobs(
+    company: dict,
+    title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
+) -> list[dict]:
     url = _with_scheme(company["career_url"])
     resp = requests.get(
         url,
@@ -343,10 +348,15 @@ def fetch_static_career_jobs(company: dict, title_filters: list[str]) -> list[di
         title_filters,
         company.get("location", ""),
         "HTTP career page",
+        excluded_title_terms,
     )
 
 
-def fetch_playwright_career_jobs(company: dict, title_filters: list[str]) -> list[dict]:
+def fetch_playwright_career_jobs(
+    company: dict,
+    title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
+) -> list[dict]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -367,6 +377,7 @@ def fetch_playwright_career_jobs(company: dict, title_filters: list[str]) -> lis
                 title_filters,
                 company.get("location", ""),
                 "Playwright career page",
+                excluded_title_terms,
             )
         finally:
             browser.close()
@@ -385,6 +396,8 @@ def discover_company_homepage(company_name: str, region_config: dict) -> Optiona
 
 def search_career_urls(company_name: str, region_config: dict, count: int = 7) -> list[dict]:
     location = region_config.get("location", "")
+    job_titles = region_config.get("job_titles", [])
+    title_query = " OR ".join(f'"{title}"' for title in job_titles)
     ats_sites = (
         "site:boards.greenhouse.io OR site:job-boards.greenhouse.io "
         "OR site:jobs.lever.co OR site:jobs.smartrecruiters.com "
@@ -392,10 +405,9 @@ def search_career_urls(company_name: str, region_config: dict, count: int = 7) -
         "OR site:careers.hibob.com OR site:recruitee.com "
         "OR site:jobs.personio.de OR site:jobs.personio.com"
     )
-    queries = [
-        f'"{company_name}" {location} {ats_sites}',
-        f'"{company_name}" {location} "Product Manager" OR "Product Owner" careers jobs',
-    ]
+    queries = [f'"{company_name}" {location} {ats_sites}']
+    if title_query:
+        queries.append(f'"{company_name}" {location} {title_query} careers jobs')
     out: list[dict] = []
     seen = set()
     for query in queries:

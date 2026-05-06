@@ -8,7 +8,10 @@ import logging
 from datetime import datetime
 import requests
 
+from core.config import get_timeout
 from core.utils import strip_html, location_matches, title_matches
+
+_TIMEOUT = get_timeout("ats_scraper")
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +44,15 @@ def detect_ats(career_url: str) -> tuple[str, str] | None:
 # ── Greenhouse ───────────────────────────────────────────────────────────────
 
 def fetch_greenhouse_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """Fetch jobs from Greenhouse public API (no auth required)."""
     try:
         resp = requests.get(
             f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
             params={"content": "true"},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         all_jobs = resp.json().get("jobs", [])
@@ -67,7 +71,7 @@ def fetch_greenhouse_jobs(
         if not location_matches(location, location_filter):
             logger.debug(f"[greenhouse] skip wrong location: {title} ({location})")
             continue
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
 
         jobs.append({
@@ -86,14 +90,15 @@ def fetch_greenhouse_jobs(
 # ── Lever ────────────────────────────────────────────────────────────────────
 
 def fetch_lever_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """Fetch jobs from Lever public API (no auth required)."""
     try:
         resp = requests.get(
             f"https://api.lever.co/v0/postings/{slug}",
             params={"mode": "json"},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json()
@@ -122,7 +127,7 @@ def fetch_lever_jobs(
             if not any(location_matches(loc, location_filter) for loc in all_locations):
                 logger.debug(f"[lever] skip wrong location: {title} ({all_locations})")
                 continue
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
 
         display_location = primary or (all_locations[0] if all_locations else "")
@@ -142,7 +147,8 @@ def fetch_lever_jobs(
 # ── SmartRecruiters ──────────────────────────────────────────────────────────
 
 def fetch_smartrecruiters_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """
     Fetch jobs from SmartRecruiters public API (no auth required).
@@ -156,7 +162,7 @@ def fetch_smartrecruiters_jobs(
         resp = requests.get(
             f"https://api.smartrecruiters.com/v1/companies/{slug}/postings",
             params=params,
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("content", [])
@@ -174,7 +180,7 @@ def fetch_smartrecruiters_jobs(
 
         if location_filter and city and not location_matches(city, location_filter):
             continue
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
 
         # Fetch full job description (N+1, only for filtered matches)
@@ -184,7 +190,7 @@ def fetch_smartrecruiters_jobs(
             try:
                 detail = requests.get(
                     f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{posting_id}",
-                    timeout=15,
+                    timeout=_TIMEOUT,
                 )
                 if detail.status_code == 200:
                     sections = detail.json().get("jobAd", {}).get("sections", [])
@@ -212,14 +218,15 @@ def fetch_smartrecruiters_jobs(
 # ── Workable ─────────────────────────────────────────────────────────────────
 
 def fetch_workable_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """Fetch jobs from Workable public API (no auth required)."""
     try:
         resp = requests.post(
             f"https://apply.workable.com/api/v3/accounts/{slug}/jobs",
             json={"query": "", "location": [location_filter] if location_filter else []},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("results", [])
@@ -234,7 +241,7 @@ def fetch_workable_jobs(
 
         if location_filter and location_str and not location_matches(location_str, location_filter):
             continue
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
 
         shortcode = posting.get("shortcode", "")
@@ -254,14 +261,15 @@ def fetch_workable_jobs(
 # ── Ashby ─────────────────────────────────────────────────────────────────────
 
 def fetch_ashby_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """Fetch jobs from Ashby public job-board API (no auth required)."""
     try:
         resp = requests.post(
             f"https://api.ashbyhq.com/posting-api/job-board/{slug}",
             json={},
-            timeout=15,
+            timeout=_TIMEOUT,
         )
         resp.raise_for_status()
         postings = resp.json().get("jobPostings", [])
@@ -277,7 +285,7 @@ def fetch_ashby_jobs(
         if not location_matches(location, location_filter):
             logger.debug(f"[ashby] skip wrong location: {title} ({location})")
             continue
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
 
         description = strip_html(posting.get("descriptionHtml", ""))
@@ -298,7 +306,8 @@ def fetch_ashby_jobs(
 # ── HiBob ─────────────────────────────────────────────────────────────────────
 
 def fetch_hibob_jobs(
-    slug: str, company_name: str, location_filter: str, title_filters: list[str]
+    slug: str, company_name: str, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """
     Scrape a HiBob career page with Playwright (JS-rendered — no public API).
@@ -344,7 +353,7 @@ def fetch_hibob_jobs(
 
     jobs = []
     for url, title in raw_links.items():
-        if not title_matches(title, title_filters):
+        if not title_matches(title, title_filters, excluded_title_terms):
             continue
         jobs.append({
             "title": title,
@@ -373,7 +382,8 @@ _FETCHERS = {
 
 
 def fetch_ats_jobs(
-    company: dict, location_filter: str, title_filters: list[str]
+    company: dict, location_filter: str, title_filters: list[str],
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict] | None:
     """
     Fetch jobs via direct ATS API for a given company.
@@ -391,4 +401,6 @@ def fetch_ats_jobs(
         return None
 
     logger.info(f"[ats] {company['name']} → {ats_name.capitalize()} (slug={slug})")
-    return fetcher(slug, company["name"], location_filter, title_filters)
+    if excluded_title_terms is None:
+        return fetcher(slug, company["name"], location_filter, title_filters)
+    return fetcher(slug, company["name"], location_filter, title_filters, excluded_title_terms)

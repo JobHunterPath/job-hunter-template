@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from core.utils import title_matches
 from sources import scraper
 
 
@@ -107,12 +108,31 @@ def test_build_queries_contains_site_param():
     for q, _, _ in queries:
         assert 'site:jobs.testco.com' in q
 
+def test_build_queries_adds_title_exclusions():
+    config = {
+        **CONFIG,
+        'exclusion_rules': {
+            **CONFIG['exclusion_rules'],
+            'excluded_title_terms': ['engineer', 'working student'],
+        },
+    }
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    queries = scraper.build_queries(companies, config)
+    for q, _, _ in queries:
+        assert '-"engineer"' in q
+        assert '-"working student"' in q
+
 def test_build_queries_includes_both_titles():
     companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
     queries = scraper.build_queries(companies, CONFIG)
     all_queries = [q for q, _, _ in queries]
     assert any('Product Manager' in q for q in all_queries)
     assert any('Product Owner' in q for q in all_queries)
+
+def test_build_queries_uses_no_title_fallback_when_config_empty():
+    config = {**CONFIG, 'global_search': {'job_titles': [], 'results_per_query': 10}}
+    companies = [{'name': 'TestCo', 'career_url': 'jobs.testco.com', 'location': 'Berlin'}]
+    assert scraper.build_queries(companies, config) == []
 
 
 # ── brave_search() ───────────────────────────────────────────────────────────
@@ -187,6 +207,20 @@ def test_scrape_brave_skips_too_senior():
          patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
         jobs = scraper.scrape()
     assert jobs == []
+
+def test_title_matches_rejects_irrelevant_product_titles():
+    filters = ['Product Manager', 'Product Owner']
+
+    assert title_matches('Senior Product Manager', filters) is True
+    assert title_matches('Technical Product Owner', filters) is True
+    assert title_matches('Product Engineer', filters) is False
+    assert title_matches('Working Student Product Management', filters) is False
+
+def test_title_exclusions_are_caller_configured():
+    filters = ['Product Manager']
+
+    assert title_matches('Product Manager Engineer', filters) is True
+    assert title_matches('Product Manager Engineer', filters, ['engineer']) is False
 
 def test_scrape_brave_skips_excluded_industry():
     raw = [{'url': 'https://jobs.testco.com/en/pm', 'title': 'PM', 'description': 'banking platform'}]

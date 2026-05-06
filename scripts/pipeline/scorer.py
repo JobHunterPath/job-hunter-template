@@ -128,7 +128,7 @@ def filter_matches(
 
     scoring_config = config.get("scoring", {})
     if min_score is None:
-        min_score = scoring_config.get("min_fit_score", 80)
+        min_score = scoring_config.get("min_fit_score", 70)
     if max_years is None:
         max_years = scoring_config.get("max_years_experience_required", 4)
 

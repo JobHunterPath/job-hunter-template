@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3 - 2026-05-06
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `e69cbfd` fix(search): enforce config-driven title filtering
+
+
 ## 1.0.2 - 2026-05-05
 
 - Synced reusable template updates from the private source repository.
