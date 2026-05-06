@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 - 2026-05-06
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `f32cd2c` fix(template): adjust sync version bump inference
+
+
 ## 1.0.3 - 2026-05-05
 
 - Synced reusable template updates from the private source repository.

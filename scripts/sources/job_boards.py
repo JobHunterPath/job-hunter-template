@@ -40,6 +40,7 @@ def fetch_arbeitnow_jobs(
     title_filters: list[str],
     location_filter: str,
     max_pages: int = 3,
+    excluded_title_terms: list[str] | None = None,
 ) -> list[dict]:
     """
     Fetch jobs from Arbeitnow. Free, no auth required.
@@ -63,7 +64,7 @@ def fetch_arbeitnow_jobs(
             title = job.get("title", "")
             location = job.get("location", "")
 
-            if not title_matches(title, title_filters):
+            if not title_matches(title, title_filters, excluded_title_terms):
                 continue
             if not location_matches(location, location_filter):
                 continue
@@ -87,6 +88,9 @@ def fetch_jsearch_jobs(
     location_filter: str,
     rapidapi_key: str,
     num_pages: int = 1,
+    excluded_title_terms: list[str] | None = None,
+    country: str = "",
+    language: str = "",
 ) -> list[dict]:
     """
     Fetch jobs via JSearch on RapidAPI. Aggregates LinkedIn, Indeed, Glassdoor.
@@ -102,24 +106,34 @@ def fetch_jsearch_jobs(
         "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
     }
 
-    titles = title_filters or ["Product Owner", "Product Manager"]
+    if not title_filters:
+        logger.warning("[jsearch] No configured job titles; skipping")
+        return []
+
+    exclusions = " ".join(f'-"{term}"' for term in (excluded_title_terms or []))
     jobs = []
 
-    for title in titles:
+    for title in title_filters:
         query = f"{title} in {location_filter}" if location_filter else title
+        if exclusions:
+            query = f"{query} {exclusions}"
 
         for page in range(1, num_pages + 1):
+            params = {
+                "query": query,
+                "page": str(page),
+                "num_pages": "1",
+            }
+            if country:
+                params["country"] = country.lower()
+            if language:
+                params["language"] = language
+
             try:
                 resp = requests.get(
                     JSEARCH_URL,
                     headers=headers,
-                    params={
-                        "query": query,
-                        "page": str(page),
-                        "num_pages": "1",
-                        "country": "de",
-                        "language": "en",
-                    },
+                    params=params,
                     timeout=_TIMEOUT,
                 )
                 resp.raise_for_status()
@@ -129,13 +143,17 @@ def fetch_jsearch_jobs(
                 break
 
             for job in data:
+                title = job.get("job_title", "")
+                if not title_matches(title, title_filters, excluded_title_terms):
+                    continue
+
                 city = job.get("job_city") or ""
                 country = job.get("job_country") or ""
                 location_str = f"{city}, {country}".strip(", ")
                 description = (job.get("job_description") or "")[:1000]
 
                 jobs.append({
-                    "title": job.get("job_title", ""),
+                    "title": title,
                     "company": job.get("employer_name", ""),
                     "url": job.get("job_apply_link", ""),
                     "posted": (job.get("job_posted_at_datetime_utc") or "")[:10],

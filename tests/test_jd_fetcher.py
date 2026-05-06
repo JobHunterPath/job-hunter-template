@@ -160,6 +160,16 @@ class TestFetchJd:
         # LLM should still be called (with the sparse static text as fallback)
         mock_extract.assert_called_once()
 
+    def test_can_skip_llm_for_snippet_enrichment(self):
+        with patch("sources.jd_fetcher._fetch_html", return_value=RICH_HTML), \
+             patch("sources.jd_fetcher._llm_extract") as mock_extract:
+            result = jd_fetcher.fetch_jd(SAMPLE_URL, use_llm=False)
+
+        mock_extract.assert_not_called()
+        assert result is not None
+        assert result["company"] == "Testcorp"
+        assert "Senior Product Manager" in result["snippet"]
+
 
 class TestFetchPlaywright:
     def test_returns_none_when_playwright_not_installed(self):

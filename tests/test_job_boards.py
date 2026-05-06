@@ -132,6 +132,13 @@ def test_jsearch_returns_empty_without_key():
     jobs = job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "")
     assert jobs == []
 
+def test_jsearch_returns_empty_without_configured_titles():
+    with patch("sources.job_boards.requests.get") as mock_get:
+        jobs = job_boards.fetch_jsearch_jobs([], "Berlin", "test-key")
+
+    assert jobs == []
+    mock_get.assert_not_called()
+
 def test_jsearch_returns_empty_on_api_error():
     with patch("sources.job_boards.requests.get", side_effect=Exception("timeout")):
         jobs = job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key")
@@ -147,6 +154,31 @@ def test_jsearch_includes_location_in_query():
         job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key")
     call_params = mock_get.call_args[1]["params"]
     assert "Berlin" in call_params["query"]
+    assert "country" not in call_params
+    assert "language" not in call_params
+
+def test_jsearch_uses_configured_country_and_language():
+    with patch("sources.job_boards.requests.get", return_value=_mock_get(JSEARCH_RESPONSE)) as mock_get:
+        job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key", country="DE", language="en")
+
+    call_params = mock_get.call_args[1]["params"]
+    assert call_params["country"] == "de"
+    assert call_params["language"] == "en"
+
+def test_jsearch_excludes_irrelevant_titles_and_query_terms():
+    job = {**JSEARCH_JOB, "job_title": "Product Engineer"}
+    with patch("sources.job_boards.requests.get", return_value=_mock_get({"status": "OK", "data": [job]})) as mock_get:
+        jobs = job_boards.fetch_jsearch_jobs(
+            ["Product Manager"],
+            "Berlin",
+            "test-key",
+            excluded_title_terms=["engineer", "working student"],
+        )
+
+    assert jobs == []
+    call_params = mock_get.call_args[1]["params"]
+    assert '-"engineer"' in call_params["query"]
+    assert '-"working student"' in call_params["query"]
 
 def test_jsearch_handles_missing_city_gracefully():
     job = {**JSEARCH_JOB, "job_city": None, "job_country": None}

@@ -73,7 +73,7 @@ def load_companies(region: Optional[str] = None) -> list[dict]:
                 "region": reg,
                 "location": location,
                 "country": region_config.get("country", ""),
-                "search_lang": region_config.get("search_lang", "en"),
+                "search_lang": region_config.get("search_lang", ""),
                 "_region_config": region_config,
             })
             loaded += 1
@@ -92,9 +92,13 @@ def load_companies(region: Optional[str] = None) -> list[dict]:
 def build_queries(companies: list[dict], config: dict) -> list[tuple[str, str, str]]:
     """Build search queries. Returns (query, company_name, location)."""
     queries = []
-    job_titles = config.get("global_search", {}).get(
-        "job_titles", ["Product Owner", "Product Manager"]
-    )
+    job_titles = config.get("global_search", {}).get("job_titles", [])
+    excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
+    exclusions = " ".join(f'-"{term}"' for term in excluded_title_terms)
+
+    if not job_titles:
+        logger.warning("[scraper] global_search.job_titles is empty; no search queries built")
+        return queries
 
     for company in companies:
         url = company["career_url"]
@@ -105,6 +109,8 @@ def build_queries(companies: list[dict], config: dict) -> list[tuple[str, str, s
             query = f'"{title}" site:{url}'
             if location:
                 query += f' "{location}"'
+            if exclusions:
+                query += f" {exclusions}"
             queries.append((query, name, location or "global"))
 
     logger.info("[scraper] Built %s search queries for %s companies", len(queries), len(companies))
@@ -168,10 +174,12 @@ def brave_search(query: str, region_config: dict, count: Optional[int] = None) -
 
 
 def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str]):
+    excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
+
     def add_job(job: dict) -> bool:
         if not job.get("url") or job["url"] in seen_urls:
             return False
-        if title_filters and not title_matches(job.get("title", ""), title_filters):
+        if title_filters and not title_matches(job.get("title", ""), title_filters, excluded_title_terms):
             logger.debug("[skip] Title not in filters: %s", job.get("title", "")[:60])
             return False
         if is_german(job.get("title", ""), job.get("snippet", ""), config):
@@ -207,7 +215,8 @@ def scrape(region: Optional[str] = None) -> list[dict]:
         return []
 
     global_cfg = config.get("global_search", {})
-    title_filters = global_cfg.get("job_titles", ["Product Owner", "Product Manager"])
+    title_filters = global_cfg.get("job_titles", [])
+    excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
     if region:
         region_cfg = config.get("regions", {}).get(region)
         enabled_regions = {
@@ -227,9 +236,9 @@ def scrape(region: Optional[str] = None) -> list[dict]:
         company_region_config = company.get("_region_config") or {
             "location": company.get("location", ""),
             "country": company.get("country", ""),
-            "search_lang": company.get("search_lang", "en"),
+            "search_lang": company.get("search_lang", ""),
         }
-        ats_jobs = fetch_ats_jobs(company, company.get("location", ""), title_filters)
+        ats_jobs = fetch_ats_jobs(company, company.get("location", ""), title_filters, excluded_title_terms)
         if ats_jobs is not None:
             for job in ats_jobs:
                 add_job(job)
@@ -237,14 +246,14 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
         direct_found = 0
         try:
-            for job in fetch_static_career_jobs(company, title_filters):
+            for job in fetch_static_career_jobs(company, title_filters, excluded_title_terms):
                 direct_found += int(add_job(job))
         except Exception as e:
             logger.debug("[scraper] HTTP career scrape failed for %s: %s", company["name"], e)
 
         if direct_found == 0:
             try:
-                for job in fetch_playwright_career_jobs(company, title_filters):
+                for job in fetch_playwright_career_jobs(company, title_filters, excluded_title_terms):
                     direct_found += int(add_job(job))
             except Exception as e:
                 logger.debug("[scraper] Playwright career scrape failed for %s: %s", company["name"], e)
@@ -301,7 +310,12 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 board_location,
                 max_pages,
             )
-            for job in fetch_arbeitnow_jobs(title_filters, board_location, max_pages):
+            for job in fetch_arbeitnow_jobs(
+                title_filters,
+                board_location,
+                max_pages,
+                excluded_title_terms,
+            ):
                 add_job(job)
 
         if boards_cfg.get("jsearch", {}).get("enabled", False):
@@ -312,7 +326,15 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 board_location,
                 title_filters,
             )
-            for job in fetch_jsearch_jobs(title_filters, board_location, RAPIDAPI_KEY, num_pages):
+            for job in fetch_jsearch_jobs(
+                title_filters,
+                board_location,
+                RAPIDAPI_KEY,
+                num_pages,
+                excluded_title_terms,
+                region_config.get("country", ""),
+                region_config.get("search_lang", ""),
+            ):
                 add_job(job)
 
     logger.info("[scraper] Complete: %s jobs found", len(results))

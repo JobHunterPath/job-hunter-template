@@ -28,6 +28,28 @@ job_boards:
     num_pages: 1
 
 exclusion_rules:
+  excluded_title_terms:
+  - engineer
+  - engineering
+  - developer
+  - software
+  - frontend
+  - backend
+  - full stack
+  - fullstack
+  - devops
+  - data scientist
+  - designer
+  - ux
+  - ui
+  - working student
+  - werkstudent
+  - student
+  - intern
+  - internship
+  - praktikum
+  - praktikant
+  - trainee
   excluded_industries:
     - "gambling"
     - "casino"

@@ -200,7 +200,7 @@ def _normalize_extracted_job(extracted) -> dict:
     return {}
 
 
-def fetch_jd(url: str) -> Optional[dict]:
+def fetch_jd(url: str, use_llm: bool = True) -> Optional[dict]:
     """
     Fetch and parse a job description from a URL.
 
@@ -208,7 +208,9 @@ def fetch_jd(url: str) -> Optional[dict]:
       1. HTTP GET + HTML strip.
       2. If extracted text is too sparse (<300 chars), retry with Playwright
          for JS-rendered pages.
-      3. LLM extracts title, company, and description from the best available text.
+      3. LLM extracts title, company, and description from the best available text
+         unless use_llm=False. Enrichment callers can skip the LLM when they
+         only need the page text as a richer snippet.
 
     Returns a job dict compatible with the pipeline (keys: title, company,
     url, snippet, posted, source), or None if no usable description was found.
@@ -231,7 +233,7 @@ def fetch_jd(url: str) -> Optional[dict]:
             plain_text = pw_text
             logger.info(f"[jd_fetcher] Playwright extracted {len(plain_text)} chars")
 
-    extracted = _normalize_extracted_job(_llm_extract(plain_text, url))
+    extracted = _normalize_extracted_job(_llm_extract(plain_text, url)) if use_llm else {}
 
     title = extracted.get("title") or "Unknown Role"
     company = extracted.get("company") or _guess_company(url) or "Unknown Company"
