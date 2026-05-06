@@ -4,20 +4,10 @@ on:
   schedule:
     # Daily job hunt region slots, Mon-Fri UTC.
     # Slot 0 starts at 06:00, slot 1 at 07:00, etc. The workflow reads
-    # enabled regions from config/search_config.yml and exits if no region
-    # exists for the current slot.
+    # enabled regions from config/search_config.yml. Keep this cron list in
+    # sync with enabled regions so GitHub does not queue no-op hosted runners.
     - cron: '0 6 * * 1-5'
     - cron: '0 7 * * 1-5'
-    - cron: '0 8 * * 1-5'
-    - cron: '0 9 * * 1-5'
-    - cron: '0 10 * * 1-5'
-    - cron: '0 11 * * 1-5'
-    - cron: '0 12 * * 1-5'
-    - cron: '0 13 * * 1-5'
-    - cron: '0 14 * * 1-5'
-    - cron: '0 15 * * 1-5'
-    - cron: '0 16 * * 1-5'
-    - cron: '0 17 * * 1-5'
     - cron: '0 18 * * 1'     # company discovery Mondays 18:00 UTC
   workflow_dispatch:
     inputs:
@@ -39,6 +29,10 @@ on:
 permissions:
   contents: write
   packages: read
+
+concurrency:
+  group: daily-jobs-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.schedule || github.event.inputs.job || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
 

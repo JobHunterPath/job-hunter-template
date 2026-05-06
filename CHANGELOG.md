@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 - 2026-05-06
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `0a8dd87` ci: reduce daily job runner queue
+
+
 ## 1.1.0 - 2026-05-06
 
 - Synced reusable template updates from the private source repository.
