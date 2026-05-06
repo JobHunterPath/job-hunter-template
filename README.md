@@ -91,6 +91,20 @@ commit generated outputs on the first run.
 
 The tracker in `config/applied_jobs.yml` prevents duplicate processing.
 
+Each hunt run tailors at most 15 matched jobs. If more jobs pass scoring, the
+pipeline processes the 15 highest-scoring matches first.
+
+Job-title search policy is driven by `config/search_config.yml`:
+
+- `global_search.job_titles` controls the roles searched across ATS pages,
+  career pages, discovery, JSearch, and search-provider fallbacks.
+- `exclusion_rules.excluded_title_terms` blocks irrelevant title terms before
+  expensive validation, scoring, tailoring, and PDF work.
+
+Keep those two lists aligned: add the role families you want to
+`global_search.job_titles`, and add adjacent roles you do not want to
+`excluded_title_terms`.
+
 ## Applied Jobs
 
 <!-- JOBS_TABLE_START -->

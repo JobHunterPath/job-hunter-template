@@ -75,13 +75,13 @@ jobs:
           fi
 
           git checkout "upstream/${UPSTREAM_BRANCH}" -- "${paths[@]}"
+          git add "${paths[@]}"
 
           if git diff --cached --quiet; then
             echo "This repository already has the selected template files."
             exit 0
           fi
 
-          git add "${paths[@]}"
           git commit -m "chore: update from job hunt template"
           git push --force-with-lease origin "$branch"
 

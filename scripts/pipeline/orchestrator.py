@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import List
 
 from core.config import setup_logging, load_api_config, profile_path
+from core.utils import title_matches
 from sources.scraper import scrape
 from pipeline.validator import validate
 from pipeline.scorer import filter_matches
@@ -41,6 +42,7 @@ from sources.jd_fetcher import fetch_jd
 logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
 
 TODAY = datetime.today().strftime("%Y-%m-%d")
+MAX_TAILORING_PER_RUN = 15
 
 # scripts/pipeline/ → scripts/ → repo root
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,6 +69,19 @@ def _parse_urls(raw: str) -> list[str]:
         for token in raw.replace(",", "\n").splitlines()
         if token.strip() and not token.strip().startswith("#")
     ]
+
+
+def _load_search_rules() -> tuple[list[str], list[str]]:
+    """Return configured accepted job titles and excluded title terms."""
+    search_cfg_path = Path(ROOT) / "config" / "search_config.yml"
+    try:
+        data = yaml.safe_load(search_cfg_path.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        return [], []
+
+    title_filters = data.get("global_search", {}).get("job_titles", [])
+    excluded_title_terms = data.get("exclusion_rules", {}).get("excluded_title_terms", [])
+    return title_filters, excluded_title_terms
 
 
 def _parse_existing_rows(table_body: str) -> dict[str, str]:
@@ -135,12 +150,20 @@ def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:
     Registers each new company to search_config.yml regions for future hunt runs.
     """
     jobs = []
+    title_filters, excluded_title_terms = _load_search_rules()
     for url in _parse_urls(raw):
         if not force and url in existing_urls:
             logger.info(f"  [skip] Already processed (use --force to re-tailor): {url}")
             continue
         job = fetch_jd(url)
         if job:
+            if not title_matches(job.get("title", ""), title_filters, excluded_title_terms):
+                logger.info(
+                    "  [skip] Irrelevant title after JD extraction: %s @ %s",
+                    job.get("title", "?"),
+                    job.get("company", "?"),
+                )
+                continue
             _register_company(job)
             jobs.append(job)
             logger.info(f"  fetched: {job['title']} @ {job['company']}")
@@ -238,7 +261,7 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
     enriched: dict[str, dict] = {}
     for job in sparse:
         logger.info(f"  enriching: {job['title'][:50]} @ {job['company']}")
-        full = fetch_jd(job["url"])
+        full = fetch_jd(job["url"], use_llm=False)
         if full and full.get("snippet"):
             enriched[job["url"]] = {**job, "snippet": full["snippet"]}
             logger.info(f"    -> {len(full['snippet'])} chars")
@@ -343,6 +366,15 @@ def _process_jobs(
             logger.warning("[pipeline] No jobs passed the scoring threshold.")
             return []
         logger.info(f"[pipeline] {len(matches)} job(s) passed scoring")
+
+    if len(matches) > MAX_TAILORING_PER_RUN:
+        matches = sorted(matches, key=lambda m: m.get("score", 0), reverse=True)
+        logger.info(
+            "[pipeline] Hard limit: tailoring top %s of %s matched job(s)",
+            MAX_TAILORING_PER_RUN,
+            len(matches),
+        )
+        matches = matches[:MAX_TAILORING_PER_RUN]
 
     logger.info(f"[pipeline] Processing {len(matches)} matched job(s)...")
     processed = []

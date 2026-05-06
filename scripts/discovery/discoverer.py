@@ -46,7 +46,7 @@ SECTOR_PROMPTS_TEMPLATE = [
             "in automotive tech, connected vehicles, EV charging, fleet management, "
             "ride-hailing software, or urban mobility platforms. Requirements:\n"
             "- English as primary working language\n"
-            "- Known to hire Product Owners or Product Managers\n"
+            "- Known to hire these roles: {job_titles}\n"
             "- NOT defence, military, weapons, banking, or gambling companies\n"
             "- NOT already in this list: {existing}\n\n"
             "Return ONLY a valid JSON array of company name strings. "
@@ -61,7 +61,7 @@ SECTOR_PROMPTS_TEMPLATE = [
             "in commercial airline software, airport systems, aviation operations tech, "
             "travel booking platforms, or tourism tech. Requirements:\n"
             "- English as primary working language\n"
-            "- Known to hire Product Owners or Product Managers\n"
+            "- Known to hire these roles: {job_titles}\n"
             "- Civil/commercial aviation ONLY — NO defence, military, or weapons companies\n"
             "- NOT already in this list: {existing}\n\n"
             "Return ONLY a valid JSON array of company name strings. "
@@ -77,7 +77,7 @@ SECTOR_PROMPTS_TEMPLATE = [
             "enterprise SaaS, B2B analytics, or supply-chain tech. "
             "Large corporates with {location} offices (e.g. Siemens, Bosch) are welcome. Requirements:\n"
             "- English as primary working language\n"
-            "- Known to hire Product Owners or Product Managers\n"
+            "- Known to hire these roles: {job_titles}\n"
             "- NOT defence, military, weapons, banking, or gambling companies\n"
             "- NOT already in this list: {existing}\n\n"
             "Return ONLY a valid JSON array of company name strings. "
@@ -93,7 +93,7 @@ SECTOR_PROMPTS_TEMPLATE = [
             "Sectors of particular interest: fintech (non-bank), health tech, climate tech, "
             "logistics, marketplace, developer tools, SaaS. Requirements:\n"
             "- English as primary working language\n"
-            "- Known to hire Product Owners or Product Managers\n"
+            "- Known to hire these roles: {job_titles}\n"
             "- NOT already in this list: {existing}\n\n"
             "Return ONLY a valid JSON array of company name strings. "
             "No explanation, no markdown, no code fences.\n"
@@ -103,12 +103,17 @@ SECTOR_PROMPTS_TEMPLATE = [
 ]
 
 
-def get_sector_prompts(location: str) -> list[dict]:
+def get_sector_prompts(location: str, job_titles: list[str]) -> list[dict]:
     """Generate sector prompts for a specific location."""
+    title_text = ", ".join(job_titles)
     return [
         {
             "sector": spec["sector"].format(location=location),
-            "prompt": spec["prompt"].format(location=location, existing="{existing}")
+            "prompt": spec["prompt"].format(
+                location=location,
+                job_titles=title_text,
+                existing="{existing}",
+            )
         }
         for spec in SECTOR_PROMPTS_TEMPLATE
     ]
@@ -135,7 +140,9 @@ def load_companies() -> tuple[list[dict], set[str]]:
 def has_jobs_in_location(company_name: str, region_config: dict) -> bool:
     """Check if a company has job postings in a specific location."""
     location = region_config.get("location", "")
-    query = f'"{company_name}" "{location}" "Product Manager" OR "Product Owner" site:jobs OR site:careers'
+    job_titles = region_config.get("job_titles", [])
+    title_query = " OR ".join(f'"{title}"' for title in job_titles)
+    query = f'"{company_name}" "{location}" {title_query} site:jobs OR site:careers'
     try:
         results = search_web(query, region_config, count=3)
         for result in results:
@@ -173,13 +180,13 @@ def get_existing_urls(companies: list[dict]) -> set[str]:
     return {c["career_url"].lower() for c in companies}
 
 
-def discover_company_names(existing: list[dict], location: str) -> list[str]:
+def discover_company_names(existing: list[dict], location: str, job_titles: list[str]) -> list[str]:
     """Run one LLM query per sector and combine the results."""
     existing_names = ", ".join(c["name"] for c in existing[:60])
     seen: set[str] = set()
     all_names: list[str] = []
 
-    sector_prompts = get_sector_prompts(location)
+    sector_prompts = get_sector_prompts(location, job_titles)
 
     for spec in sector_prompts:
         prompt = spec["prompt"].format(existing=existing_names)
@@ -273,10 +280,17 @@ def run():
             search_config = yaml.safe_load(f) or {}
 
     regions = {k: v for k, v in search_config.get("regions", {}).items() if v.get("enabled", True)}
+    job_titles = search_config.get("global_search", {}).get("job_titles", [])
 
     if not regions:
         print("[discover] No enabled regions found in search_config.yml. Nothing to discover.")
         return
+    if not job_titles:
+        print("[discover] global_search.job_titles is empty. Nothing to discover.")
+        return
+
+    for region_config in regions.values():
+        region_config["job_titles"] = job_titles
 
     region_discoveries = {}  # Track which region discovered which companies
 
@@ -284,9 +298,9 @@ def run():
         location = region_config.get("location", region_name.title())
         print(f"\n[discover] Discovering companies for region: {region_name} ({location})")
 
-        sectors = ", ".join(s["sector"] for s in get_sector_prompts(location))
+        sectors = ", ".join(s["sector"] for s in get_sector_prompts(location, job_titles))
         print(f"[discover] Querying LLM across sectors: {sectors}")
-        suggested = discover_company_names(existing, location)
+        suggested = discover_company_names(existing, location, job_titles)
         print(f"[discover] LLM suggested {len(suggested)} companies: {suggested}\n")
 
         new_names = [

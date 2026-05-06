@@ -310,6 +310,9 @@ For a single location, update the `berlin` region:
 - `location`: your target city or region (e.g., "Berlin", "Munich").
 - `country`: your target country code, such as `DE`, `GB`, or `US`.
 - `job_titles`: the roles you want (e.g., "Product Manager", "Product Owner").
+- `exclusion_rules.excluded_title_terms`: title terms you never want processed,
+  such as "engineer", "working student", "intern", or terms outside your target
+  role family.
 - `companies`: companies you want the automation to check.
 - `excluded_companies`: companies you never want to process.
 
@@ -812,6 +815,9 @@ Inside you may see:
 - `meta.json`: score and matching details.
 
 Always review the resume and cover letter before applying.
+
+Each hunt run tailors at most 15 matched jobs. If more than 15 jobs pass the
+score threshold, the pipeline processes the 15 highest-scoring matches first.
 
 ## 21. Faster GitHub Actions With The Runner Image
 

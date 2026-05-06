@@ -19,11 +19,35 @@ def location_matches(location_str: str, target: str) -> bool:
     return target.lower() in location_str.lower()
 
 
-def title_matches(title: str, title_filters: list[str]) -> bool:
-    """Return True if any filter appears (case-insensitive) in title, or if filters is empty."""
+def _contains_phrase(text: str, phrase: str) -> bool:
+    """Match a phrase on word boundaries while allowing punctuation between words."""
+    words = re.findall(r"[a-z0-9]+", phrase.lower())
+    if not words:
+        return False
+    pattern = r"\b" + r"[\W_]+".join(re.escape(word) for word in words) + r"\b"
+    return re.search(pattern, text.lower()) is not None
+
+
+def title_matches(
+    title: str,
+    title_filters: list[str],
+    excluded_terms: list[str] | tuple[str, ...] | None = None,
+) -> bool:
+    """
+    Return True only for configured product title phrases.
+
+    The pipeline is intentionally strict here because every false positive can
+    trigger URL checks, LLM calls, JD enrichment, LaTeX compilation, and cover
+    letter generation. Empty title filters still mean "allow all" for callers
+    that deliberately disable title filtering.
+    """
     if not title_filters:
         return True
-    return any(f.lower() in title.lower() for f in title_filters)
+
+    if excluded_terms and any(_contains_phrase(title, term) for term in excluded_terms):
+        return False
+
+    return any(_contains_phrase(title, title_filter) for title_filter in title_filters)
 
 
 def url_is_alive(url: str, timeout: int = 5) -> bool:
