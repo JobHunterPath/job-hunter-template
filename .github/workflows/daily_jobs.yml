@@ -2,12 +2,19 @@ name: Job Hunt Pipeline
 
 on:
   schedule:
-    # Daily job hunt region slots, Mon-Fri UTC.
-    # Slot 0 starts at 06:00, slot 1 at 07:00, etc. The workflow reads
-    # enabled regions from config/search_config.yml. Keep this cron list in
-    # sync with enabled regions so GitHub does not queue no-op hosted runners.
+    # Daily job hunt region slots, Mon-Fri Europe/Berlin local time.
+    # Slot 0 starts at 06:00 Berlin time, slot 1 at 07:00, etc. GitHub
+    # cron is UTC-only, so this UTC window covers Berlin summer/winter time;
+    # the resolver below skips UTC runs outside the intended Berlin slots.
+    - cron: '0 4 * * 1-5'
+    - cron: '0 5 * * 1-5'
     - cron: '0 6 * * 1-5'
     - cron: '0 7 * * 1-5'
+    - cron: '0 8 * * 1-5'
+    - cron: '0 9 * * 1-5'
+    - cron: '0 10 * * 1-5'
+    - cron: '0 11 * * 1-5'
+    - cron: '0 12 * * 1-5'
     - cron: '0 18 * * 1'     # company discovery Mondays 18:00 UTC
   workflow_dispatch:
     inputs:
@@ -59,9 +66,11 @@ jobs:
           INPUT_REGION: ${{ github.event.inputs.region || 'all' }}
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
+          from datetime import datetime, timezone
           import os
           import sys
           import yaml
+          from zoneinfo import ZoneInfo
 
           with open("config/search_config.yml", encoding="utf-8") as f:
               cfg = yaml.safe_load(f) or {}
@@ -76,17 +85,15 @@ jobs:
           requested = (os.environ.get("INPUT_REGION") or "all").strip()
 
           if event_name == "schedule":
-              try:
-                  hour = int(schedule.split()[1])
-              except Exception:
-                  print("should_run=false")
-                  print("reason=Could not resolve scheduled hour")
-                  sys.exit(0)
-
-              slot = hour - 6
+              berlin_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Berlin"))
+              slot = berlin_now.hour - 6
               if slot < 0 or slot >= len(regions):
                   print("should_run=false")
-                  print(f"reason=No enabled region for schedule slot {slot}")
+                  print(
+                      "reason="
+                      f"No enabled region for Berlin slot {slot} "
+                      f"(Berlin time {berlin_now:%Y-%m-%d %H:%M})"
+                  )
                   sys.exit(0)
 
               region = regions[slot]
@@ -94,6 +101,7 @@ jobs:
               print(f"region={region}")
               print(f"arg=--region {region}")
               print(f"label={region}")
+              print(f"berlin_time={berlin_now:%Y-%m-%d %H:%M}")
               sys.exit(0)
 
           if requested.lower() in {"", "all", "*"}:
