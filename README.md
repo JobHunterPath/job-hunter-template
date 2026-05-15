@@ -41,9 +41,12 @@ installing LaTeX on every job run.
 7. Run tests, then run the pipeline locally or through GitHub Actions.
 
 Scheduled GitHub hunts run enabled regions one hour apart, starting at
-06:00 UTC on weekdays. Manual **Job Hunt Pipeline** runs include a `region`
-field where you can enter `all` or a specific region key from
-`config/search_config.yml`.
+06:00 Europe/Berlin time on weekdays. The first enabled region in
+`config/search_config.yml` runs first, the second enabled region runs one hour
+later, and so on. Extra cron slots exit before the pipeline starts, so a repo
+with one enabled region only runs the first slot. Manual **Job Hunt Pipeline**
+runs include a `region` field where you can enter `all` or a specific region
+key from `config/search_config.yml`.
 
 ## Search Fallbacks
 
