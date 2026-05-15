@@ -781,10 +781,16 @@ subfolder per processed job.
 For scheduled daily search, use the **Job Hunt Pipeline** workflow. Scheduled
 hunt runs are staggered by enabled region:
 
-- 06:00 UTC runs the first enabled region in `config/search_config.yml`.
-- 07:00 UTC runs the second enabled region.
-- Later hourly slots continue through 17:00 UTC.
-- Empty slots exit quickly if you have fewer enabled regions.
+- 06:00 Europe/Berlin time runs the first enabled region in
+  `config/search_config.yml`.
+- 07:00 Europe/Berlin time runs the second enabled region.
+- Later hourly slots continue for the remaining enabled regions.
+- Empty slots exit before installing dependencies or running the pipeline if
+  you have fewer enabled regions than cron entries.
+
+For example, if only `berlin` is enabled, only the 06:00 Berlin slot runs the
+pipeline. All later scheduled slots stop after resolving that there is no
+region for the slot.
 
 To run a hunt manually:
 

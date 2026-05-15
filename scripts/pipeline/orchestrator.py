@@ -448,7 +448,7 @@ def run(args: argparse.Namespace) -> int:
         jobs, existing_urls, existing_titles = _jobs_from_hunt(args.region)
         if not jobs:
             logger.warning("[pipeline] No new jobs found. Exiting.")
-            return 2
+            return 0
 
         logger.info("[pipeline] Step 1b: Enriching sparse job descriptions...")
         jobs = _enrich_snippets(jobs)

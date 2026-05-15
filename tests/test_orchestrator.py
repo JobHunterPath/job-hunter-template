@@ -1,5 +1,6 @@
 """Tests for pipeline/orchestrator.py orchestration safeguards."""
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from pipeline import orchestrator
@@ -57,3 +58,21 @@ def test_jobs_from_links_skips_irrelevant_extracted_title():
 
     assert jobs == []
     register.assert_not_called()
+
+
+def test_hunt_no_new_jobs_is_successful_empty_run():
+    args = SimpleNamespace(
+        mode="hunt",
+        region="magdeburg",
+        skip_validate=False,
+        skip_score=False,
+        force=False,
+    )
+
+    with patch("pipeline.orchestrator.load_api_config", return_value={}), \
+         patch("pipeline.orchestrator.yaml.safe_load", return_value={"scoring": {}}), \
+         patch("builtins.open"), \
+         patch("pipeline.orchestrator._jobs_from_hunt", return_value=([], set(), set())):
+        code = orchestrator.run(args)
+
+    assert code == 0

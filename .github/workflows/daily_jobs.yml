@@ -5,7 +5,9 @@ on:
     # Daily job hunt region slots, Mon-Fri Europe/Berlin local time.
     # Slot 0 starts at 06:00 Berlin time, slot 1 at 07:00, etc. GitHub
     # cron is UTC-only, so this UTC window covers Berlin summer/winter time;
-    # the resolver below skips UTC runs outside the intended Berlin slots.
+    # the resolver maps the scheduled UTC hour to Berlin time and skips UTC
+    # runs outside the intended Berlin slots. Extra cron entries are harmless:
+    # if a repo has fewer enabled regions, those slots stop before the pipeline.
     - cron: '0 4 * * 1-5'
     - cron: '0 5 * * 1-5'
     - cron: '0 6 * * 1-5'
@@ -66,11 +68,34 @@ jobs:
           INPUT_REGION: ${{ github.event.inputs.region || 'all' }}
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
-          from datetime import datetime, timezone
+          import calendar
+          from datetime import datetime, timedelta, timezone
           import os
           import sys
           import yaml
-          from zoneinfo import ZoneInfo
+
+          def _last_sunday(year, month):
+              day = calendar.monthrange(year, month)[1]
+              while datetime(year, month, day).weekday() != 6:
+                  day -= 1
+              return day
+
+          def _berlin_offset_hours(utc_dt):
+              start = datetime(
+                  utc_dt.year,
+                  3,
+                  _last_sunday(utc_dt.year, 3),
+                  1,
+                  tzinfo=timezone.utc,
+              )
+              end = datetime(
+                  utc_dt.year,
+                  10,
+                  _last_sunday(utc_dt.year, 10),
+                  1,
+                  tzinfo=timezone.utc,
+              )
+              return 2 if start <= utc_dt < end else 1
 
           with open("config/search_config.yml", encoding="utf-8") as f:
               cfg = yaml.safe_load(f) or {}
@@ -85,14 +110,30 @@ jobs:
           requested = (os.environ.get("INPUT_REGION") or "all").strip()
 
           if event_name == "schedule":
-              berlin_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Berlin"))
-              slot = berlin_now.hour - 6
+              try:
+                  scheduled_hour = int(schedule.split()[1])
+              except Exception:
+                  print("should_run=false")
+                  print(f"reason=Could not resolve scheduled hour from {schedule!r}")
+                  sys.exit(0)
+
+              now_utc = datetime.now(timezone.utc)
+              scheduled_utc = now_utc.replace(
+                  hour=scheduled_hour,
+                  minute=0,
+                  second=0,
+                  microsecond=0,
+              )
+              scheduled_berlin = scheduled_utc + timedelta(
+                  hours=_berlin_offset_hours(scheduled_utc)
+              )
+              slot = scheduled_berlin.hour - 6
               if slot < 0 or slot >= len(regions):
                   print("should_run=false")
                   print(
                       "reason="
-                      f"No enabled region for Berlin slot {slot} "
-                      f"(Berlin time {berlin_now:%Y-%m-%d %H:%M})"
+                      f"No enabled region configured for Berlin slot {slot} "
+                      f"(scheduled Berlin time {scheduled_berlin:%Y-%m-%d %H:%M})"
                   )
                   sys.exit(0)
 
@@ -101,7 +142,7 @@ jobs:
               print(f"region={region}")
               print(f"arg=--region {region}")
               print(f"label={region}")
-              print(f"berlin_time={berlin_now:%Y-%m-%d %H:%M}")
+              print(f"berlin_time={scheduled_berlin:%Y-%m-%d %H:%M}")
               sys.exit(0)
 
           if requested.lower() in {"", "all", "*"}:

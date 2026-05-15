@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-05-15
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `4878ad2` fix(ci): handle empty daily hunt slots
+
+
 ## 1.3.0 - 2026-05-14
 
 - Synced reusable template updates from the private source repository.
