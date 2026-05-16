@@ -156,6 +156,15 @@ def test_brave_search_raises_on_http_error():
         with pytest.raises(Exception):
             scraper.brave_search('query', {'country': 'DE'})
 
+def test_brave_search_omits_unsupported_country_codes():
+    results = [{'url': 'https://jobs.example.com/en/pm', 'title': 'PM', 'description': 'role'}]
+    with patch('sources.scraper.requests.get', return_value=_mock_http(results)) as mock_get:
+        scraper.brave_search('query', {'country': 'QA', 'search_lang': 'en'})
+
+    call_params = mock_get.call_args[1]['params']
+    assert 'country' not in call_params
+    assert call_params['search_lang'] == 'en'
+
 
 # ── scrape() — Brave fallback path ───────────────────────────────────────────
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 - 2026-05-16
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `4589a38` search: expand regional company coverage
+
+
 ## 1.4.0 - 2026-05-15
 
 - Synced reusable template updates from the private source repository.
