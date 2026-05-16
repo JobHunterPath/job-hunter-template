@@ -39,6 +39,15 @@ BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 TAVILY_URL = "https://api.tavily.com/search"
 EXA_URL = "https://api.exa.ai/search"
 
+# Brave's web-search country enum is narrower than ISO 3166-1.  Keep unsupported
+# countries in the query text via region.location, but do not send them as a
+# param because Brave rejects them before fallback providers can help.
+BRAVE_SUPPORTED_COUNTRIES = {
+    "AR", "AU", "AT", "BE", "BR", "CA", "CL", "DK", "FI", "FR", "DE", "HK",
+    "IN", "ID", "IT", "JP", "KR", "MY", "MX", "NL", "NZ", "NO", "PL", "PT",
+    "PH", "RU", "SA", "ZA", "ES", "SE", "CH", "TW", "TR", "GB", "US",
+}
+
 JOB_HINTS = (
     "job", "jobs", "career", "careers", "position", "positions", "opening",
     "openings", "vacancy", "vacancies",
@@ -169,8 +178,9 @@ class BraveProvider(SearchProvider):
         }
         if region_config.get("search_lang"):
             params["search_lang"] = region_config["search_lang"]
-        if region_config.get("country"):
-            params["country"] = region_config["country"]
+        country = str(region_config.get("country") or "").upper()
+        if country in BRAVE_SUPPORTED_COUNTRIES:
+            params["country"] = country
         resp = requests.get(
             BRAVE_URL,
             headers={
