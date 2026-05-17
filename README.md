@@ -54,7 +54,7 @@ installing LaTeX on every job run.
      content selection when an uncommented Projects section exists in your resume)
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. If you change LLM provider, replace the `llm.models` values with valid model names from that provider.
-7. Store API keys in environment variables, GitHub Actions secrets, or keyring.
+7. Create and store API keys using the step-by-step instructions in `SETUP.md`.
 8. Run the preflight checklist in [SETUP.md](SETUP.md#20-preflight-checklist-before-running-a-workflow), then run the pipeline through GitHub Actions.
 9. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
 
