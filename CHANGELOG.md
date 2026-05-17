@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.2 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `b1b78a0` docs: explain llm model selection
+
+
 ## 2.8.1 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.

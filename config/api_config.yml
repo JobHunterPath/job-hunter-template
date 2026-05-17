@@ -13,6 +13,8 @@ llm:
     linkedin: anthropic
     jd_extraction: anthropic
   models:
+    # Model names must match the provider configured for each role above.
+    # If you switch providers, replace these with model names from that provider.
     validation: "claude-haiku-4-5-20251001"
     scoring: "claude-haiku-4-5-20251001"
     tailoring: "claude-sonnet-4-6"
