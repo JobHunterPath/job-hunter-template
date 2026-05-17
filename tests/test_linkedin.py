@@ -191,18 +191,34 @@ def test_discover_engagement_writes_review_queues(tmp_path):
 
 def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
     cfg = _config(tmp_path)
-    search_result = [{
-        "url": "https://www.linkedin.com/in/example",
-        "title": "Example Product Leader",
-        "description": "Posts about platform product management.",
-        "source": "SearXNG",
-        "query": 'site:linkedin.com/in "platform product management"',
-    }]
+    search_result = [
+        {
+            "url": "https://www.linkedin.com/in/example",
+            "title": "Example Product Leader - Senior Product Manager - LinkedIn",
+            "description": "Posts about platform product management.",
+            "source": "SearXNG",
+            "query": 'site:linkedin.com/in "platform product management"',
+        },
+        {
+            "url": "https://www.linkedin.com/posts/example",
+            "title": "Example post - LinkedIn",
+            "description": "A post about platform product management.",
+            "source": "SearXNG",
+            "query": 'site:linkedin.com/posts "platform product management"',
+        },
+    ]
 
     with patch("linkedin.discover_engagement.search_web", return_value=search_result), \
          patch("linkedin.discover_engagement.complete_linkedin", return_value='{"people": [{"name": "broken"}]'):
         result = discover_engagement.discover(cfg)
 
     assert len(result["people"]) == 1
-    assert result["people"][0]["suggested_action"] == "review manually"
+    assert len(result["posts"]) == 1
+    person = result["people"][0]
+    post = result["posts"][0]
+    assert person["suggested_action"] == "review manually"
+    assert person["relationship_type"] == "peer_conversation"
+    assert person["message_variants"]
+    assert post["suggested_comment"]
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
+    assert "Useful framing" in (tmp_path / "engagement.md").read_text(encoding="utf-8")

@@ -24,7 +24,7 @@ llm:
     tailoring: 4000
     cover_letter: 800
     discovery: 400
-    linkedin: 1800
+    linkedin: 3000
 
 ollama:
   base_url: "http://localhost:11434"

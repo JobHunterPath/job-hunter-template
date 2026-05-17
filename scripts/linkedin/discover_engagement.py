@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from pathlib import Path
 
 from core.config import setup_logging
@@ -58,38 +59,103 @@ suggested_action, message_variants.
 Each post: author_or_source, topic, url, why_relevant, suggested_comment."""
 
 
+def _topic_from_query(query: str) -> str:
+    match = re.search(r'"([^"]+)"', query or "")
+    return match.group(1) if match else "this topic"
+
+
+def _clean_title(title: str) -> str:
+    title = re.sub(r"\s+-\s+LinkedIn\s*$", "", title or "", flags=re.IGNORECASE)
+    title = re.sub(r"\s+\|\s+LinkedIn\s*$", "", title, flags=re.IGNORECASE)
+    return title.strip() or "LinkedIn result"
+
+
+def _person_name(title: str) -> str:
+    cleaned = _clean_title(title)
+    for separator in (" - ", " | ", " @ "):
+        if separator in cleaned:
+            return cleaned.split(separator, 1)[0].strip()
+    return cleaned
+
+
+def _relationship_type(title: str) -> str:
+    lower = title.lower()
+    if any(term in lower for term in ("recruiter", "talent acquisition", "sourcer")):
+        return "recruiter_intro"
+    if any(term in lower for term in ("head of product", "director", "vp", "chief product")):
+        return "hiring_manager_intro"
+    if any(term in lower for term in ("product manager", "product owner", "platform pm", "technical pm")):
+        return "peer_conversation"
+    return "follow_only"
+
+
+def _trim_words(text: str, max_words: int) -> str:
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]).rstrip(".,;:") + "."
+
+
+def _message_variants(name: str, topic: str, max_words: int) -> list[str]:
+    first_name = name.split()[0] if name else "there"
+    variants = [
+        (
+            f"Hi {first_name}, I came across your work around {topic}. "
+            "I work around technical product ownership in AI, speech, and platform products, "
+            "and I am trying to learn from people thinking about similar problems. "
+            "Would be glad to connect and follow your perspective here."
+        ),
+        (
+            f"Hi {first_name}, your work around {topic} is close to topics I am exploring "
+            "from a product perspective. I work in technical product ownership across AI, "
+            "speech, and platform systems. Would be glad to connect and stay in touch."
+        ),
+    ]
+    return [_trim_words(text, max_words) for text in variants]
+
+
+def _suggested_comment(topic: str) -> str:
+    return (
+        f"Useful framing on {topic}. The part that stands out to me is treating it "
+        "as an operating and product problem, not only a technical implementation topic."
+    )
+
+
 def _fallback_payload(raw_results: list[dict], config: dict) -> dict:
     """Keep discovery useful when the model returns malformed JSON."""
     discovery = config.get("engagement_discovery", {})
     networking = config.get("networking", {})
     people_limit = int(networking.get("suggestions_per_run", 8))
     posts_limit = int(discovery.get("posts_per_run", 8))
+    max_message_words = int(networking.get("max_message_words", 70))
     people: list[dict] = []
     posts: list[dict] = []
 
     for item in raw_results:
         url = item.get("url", "")
-        title = item.get("title", "") or "LinkedIn result"
+        title = _clean_title(item.get("title", ""))
         description = item.get("description", "")
+        topic = _topic_from_query(item.get("query", ""))
         entry = {
             "url": url,
             "why_relevant": description[:240],
         }
         if "/in/" in url and len(people) < people_limit:
+            name = _person_name(title)
             people.append({
                 **entry,
-                "name": title,
-                "role_or_context": "Review manually",
-                "relationship_type": "follow_only",
+                "name": name,
+                "role_or_context": title,
+                "relationship_type": _relationship_type(title),
                 "suggested_action": "review manually",
-                "message_variants": [],
+                "message_variants": _message_variants(name, topic, max_message_words),
             })
-        elif len(posts) < posts_limit:
+        elif "/posts/" in url and len(posts) < posts_limit:
             posts.append({
                 **entry,
                 "author_or_source": title,
-                "topic": item.get("query", "LinkedIn post"),
-                "suggested_comment": "",
+                "topic": topic,
+                "suggested_comment": _suggested_comment(topic),
             })
 
     return {"people": people, "posts": posts}

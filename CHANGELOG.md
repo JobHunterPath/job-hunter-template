@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `08f6b93` fix(linkedin): improve engagement fallback output
+
+
 ## 2.1.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
