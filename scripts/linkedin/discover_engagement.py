@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+from datetime import date, timedelta
 from pathlib import Path
 
 from core.config import setup_logging
@@ -46,6 +47,17 @@ MESSAGE RULES:
 - no "pick your brain"
 - max {max_message_words} words per message
 - ask for discussion only when it feels natural
+- each message_variant must reference something specific about this person:
+  their actual role, company, a product they built, or what they post about
+  as visible in the search snippet — not just the broad topic name
+
+COMMENT RULES:
+- suggested_comment must engage with something concrete in the post: a specific
+  claim, data point, framework, trade-off, or observation from the description
+- do not open with "useful framing" or similar generic phrases
+- do not write a comment that could apply to any post on the same topic
+- max 30 words
+- if the description is too thin to write something specific, return an empty string
 
 FORBIDDEN PHRASES:
 {forbidden_phrases}
@@ -55,8 +67,9 @@ SEARCH RESULTS:
 
 Return a JSON object with keys "people" and "posts".
 Each person: name, role_or_context, url, why_relevant, relationship_type,
-suggested_action, message_variants.
-Each post: author_or_source, topic, url, why_relevant, suggested_comment."""
+suggested_action, message_variants (list of 2 strings, each specific to this person).
+Each post: author_or_source, topic, url, why_relevant, suggested_comment
+(specific to this post's content, or empty string if description is too thin)."""
 
 
 def _topic_from_query(query: str) -> str:
@@ -96,29 +109,56 @@ def _trim_words(text: str, max_words: int) -> str:
     return " ".join(words[:max_words]).rstrip(".,;:") + "."
 
 
-def _message_variants(name: str, topic: str, max_words: int) -> list[str]:
+_DATE_RE = re.compile(r"^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{4})\s+·")
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+)}
+
+
+def _post_date(description: str) -> date | None:
+    """Parse the leading date from a LinkedIn search snippet, e.g. 'Mar 16, 2026 ·'."""
+    m = _DATE_RE.match(description or "")
+    if not m:
+        return None
+    try:
+        return date(int(m.group(3)), _MONTHS[m.group(1)], int(m.group(2)))
+    except (KeyError, ValueError):
+        return None
+
+
+def _is_recent_post(description: str, max_age_days: int = 28) -> bool:
+    """True when the post date is within max_age_days, or when no date can be parsed."""
+    post_dt = _post_date(description)
+    if post_dt is None:
+        return True
+    return (date.today() - post_dt).days <= max_age_days
+
+
+def _message_variants(name: str, role_context: str, description: str, max_words: int) -> list[str]:
     first_name = name.split()[0] if name else "there"
+    role_part = role_context
+    for sep in (" - ", " | ", " @ "):
+        if sep in role_context:
+            role_part = role_context.split(sep, 1)[1].strip()
+            break
+    detail = description.strip()[:120].rstrip(".,;:") if description else ""
     variants = [
-        (
-            f"Hi {first_name}, I came across your work around {topic}. "
-            "I work around technical product ownership in AI, speech, and platform products, "
-            "and I am trying to learn from people thinking about similar problems. "
-            "Would be glad to connect and follow your perspective here."
+        _trim_words(
+            f"Hi {first_name}, I came across your profile"
+            + (f" — {detail}" if detail else f" and your work as {role_part}")
+            + ". I work in technical product ownership across AI, speech, and platform"
+            " products. Would be glad to connect.",
+            max_words,
         ),
-        (
-            f"Hi {first_name}, your work around {topic} is close to topics I am exploring "
-            "from a product perspective. I work in technical product ownership across AI, "
-            "speech, and platform systems. Would be glad to connect and stay in touch."
+        _trim_words(
+            f"Hi {first_name}, your background as {role_part} is close to what I work on"
+            " in technical product ownership across AI, speech, and platform products."
+            " Would be glad to follow your perspective here.",
+            max_words,
         ),
     ]
-    return [_trim_words(text, max_words) for text in variants]
-
-
-def _suggested_comment(topic: str) -> str:
-    return (
-        f"Useful framing on {topic}. The part that stands out to me is treating it "
-        "as an operating and product problem, not only a technical implementation topic."
-    )
+    return variants
 
 
 def _fallback_payload(raw_results: list[dict], config: dict) -> dict:
@@ -148,14 +188,14 @@ def _fallback_payload(raw_results: list[dict], config: dict) -> dict:
                 "role_or_context": title,
                 "relationship_type": _relationship_type(title),
                 "suggested_action": "review manually",
-                "message_variants": _message_variants(name, topic, max_message_words),
+                "message_variants": _message_variants(name, title, description, max_message_words),
             })
         elif "/posts/" in url and len(posts) < posts_limit:
             posts.append({
                 **entry,
                 "author_or_source": title,
                 "topic": topic,
-                "suggested_comment": _suggested_comment(topic),
+                "suggested_comment": "",
             })
 
     return {"people": people, "posts": posts}
@@ -179,6 +219,8 @@ def _collect_results(config: dict) -> list[dict]:
             for item in search_web(query, region, count=results_per_query):
                 url = item.get("url", "")
                 if not url or url in seen:
+                    continue
+                if "/posts/" in url and not _is_recent_post(item.get("description", "")):
                     continue
                 seen.add(url)
                 collected.append({"query": query, **item})
@@ -216,16 +258,19 @@ def _render_posts(items: list[dict]) -> str:
         return "_No post suggestions returned._"
     sections = []
     for item in items:
-        sections.append(
-            f"""### {item.get('topic', 'Post to review')}
-
-- Author/source: {item.get('author_or_source', '')}
-- Link: {item.get('url', '')}
-- Why relevant: {item.get('why_relevant', '')}
-- Suggested comment: {item.get('suggested_comment', '')}
-- Action: review manually
-"""
-        )
+        comment = item.get("suggested_comment", "")
+        lines = [
+            f"### {item.get('topic', 'Post to review')}",
+            "",
+            f"- Author/source: {item.get('author_or_source', '')}",
+            f"- Link: {item.get('url', '')}",
+            f"- Why relevant: {item.get('why_relevant', '')}",
+        ]
+        if comment:
+            lines.append(f"- Suggested comment: {comment}")
+        lines.append("- Action: review manually")
+        lines.append("")
+        sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
 

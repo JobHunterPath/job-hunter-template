@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `3161130` fix(linkedin): filter post results older than 4 weeks
+
+
 ## 2.3.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
