@@ -694,6 +694,33 @@ You need API keys, or Ollama running locally, before real job processing can
 work. If local testing is too much, use GitHub Actions after adding secrets in
 the next step.
 
+## 17.5 Test LinkedIn Support Locally
+
+Configure `linkedin/config.yml` first. Your story bank is treated as
+confidential input, so generated ideas and drafts must stay generalized and
+public-safe.
+
+Generate raw ideas:
+
+```bash
+PYTHONPATH=scripts python scripts/linkedin/generate_ideas.py
+```
+
+Create draft posts from unused raw ideas:
+
+```bash
+PYTHONPATH=scripts python scripts/linkedin/draft_posts.py
+```
+
+Discover public LinkedIn people/posts for manual review:
+
+```bash
+PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
+```
+
+Nothing here posts, comments, follows, connects, messages, or likes on
+LinkedIn. Review every output before using it.
+
 ## 18. Add API Keys In GitHub
 
 Do not paste API keys into files.
@@ -803,6 +830,20 @@ To run a hunt manually:
 
 Run it manually once before relying on the schedule.
 
+## 19.5 Run LinkedIn Content In GitHub
+
+Open **Actions -> LinkedIn Content**. You can run:
+
+- `generate-ideas`: adds public-safe raw ideas to `linkedin/ideas.md`.
+- `draft-posts`: creates review drafts under `linkedin/drafts/`.
+- `discover-engagement`: searches public LinkedIn results and updates
+  `linkedin/networking.md` and `linkedin/engagement.md`.
+- `all`: runs all three jobs manually.
+
+The scheduled workflow runs idea generation weekly, draft generation weekly,
+and engagement discovery three times per week. It commits only files under
+`linkedin/`. It never performs LinkedIn write actions.
+
 ## 20. Review The Output
 
 Each processed job creates a folder like:
@@ -907,10 +948,12 @@ typing Git commands.
 6. Keep `upstream_branch` as `main`.
 7. Leave `update_config` turned off unless you want template config files to
    overwrite your current config files.
-8. Click **Run workflow**.
-9. Wait for the workflow to open a pull request.
-10. Review the changed files and merge the pull request when ready.
-11. Pull the merged changes to your laptop:
+8. Leave `update_linkedin` turned off unless you want the starter LinkedIn
+   workspace copied over or refreshed.
+9. Click **Run workflow**.
+10. Wait for the workflow to open a pull request.
+11. Review the changed files and merge the pull request when ready.
+12. Pull the merged changes to your laptop:
 
 ```bash
 git checkout main
@@ -931,6 +974,7 @@ By default, the workflow preserves:
 - project instructions
 - generated jobs
 - config files
+- LinkedIn workspace files
 
 If a release adds new config fields, read the pull request description and this
 `SETUP.md`, then copy only the new fields you need into your own config files.

@@ -6,6 +6,12 @@ uses direct ATS APIs first, then HTTP/BeautifulSoup, Playwright, an ephemeral
 SearXNG container in GitHub Actions, and optional search APIs such as Brave,
 Tavily, and Exa.
 
+It also includes a lightweight LinkedIn content and networking system. The
+LinkedIn workflow generates public-safe post ideas from your private story bank,
+creates weekly draft posts for review, and suggests people/posts for manual
+engagement. It never posts, comments, follows, connects, messages, or likes
+automatically.
+
 ## Start Here
 
 For initial setup, read [SETUP.md](SETUP.md) first. It walks through the
@@ -39,6 +45,7 @@ installing LaTeX on every job run.
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
 7. Run tests, then run the pipeline locally or through GitHub Actions.
+8. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
 
 Scheduled GitHub hunts run enabled regions one hour apart, starting at
 06:00 Europe/Berlin time on weekdays. The first enabled region in
@@ -93,6 +100,17 @@ The template includes an empty `jobs/` folder so GitHub Actions can write and
 commit generated outputs on the first run.
 
 The tracker in `config/applied_jobs.yml` prevents duplicate processing.
+
+LinkedIn review files are written to:
+
+```text
+linkedin/ideas.md
+linkedin/drafts/
+linkedin/engagement.md
+linkedin/networking.md
+```
+
+Review everything manually before using it on LinkedIn.
 
 Each hunt run tailors at most 15 matched jobs. If more jobs pass scoring, the
 pipeline processes the 15 highest-scoring matches first.
