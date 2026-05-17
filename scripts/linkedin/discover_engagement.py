@@ -58,6 +58,43 @@ suggested_action, message_variants.
 Each post: author_or_source, topic, url, why_relevant, suggested_comment."""
 
 
+def _fallback_payload(raw_results: list[dict], config: dict) -> dict:
+    """Keep discovery useful when the model returns malformed JSON."""
+    discovery = config.get("engagement_discovery", {})
+    networking = config.get("networking", {})
+    people_limit = int(networking.get("suggestions_per_run", 8))
+    posts_limit = int(discovery.get("posts_per_run", 8))
+    people: list[dict] = []
+    posts: list[dict] = []
+
+    for item in raw_results:
+        url = item.get("url", "")
+        title = item.get("title", "") or "LinkedIn result"
+        description = item.get("description", "")
+        entry = {
+            "url": url,
+            "why_relevant": description[:240],
+        }
+        if "/in/" in url and len(people) < people_limit:
+            people.append({
+                **entry,
+                "name": title,
+                "role_or_context": "Review manually",
+                "relationship_type": "follow_only",
+                "suggested_action": "review manually",
+                "message_variants": [],
+            })
+        elif len(posts) < posts_limit:
+            posts.append({
+                **entry,
+                "author_or_source": title,
+                "topic": item.get("query", "LinkedIn post"),
+                "suggested_comment": "",
+            })
+
+    return {"people": people, "posts": posts}
+
+
 def _collect_results(config: dict) -> list[dict]:
     discovery = config.get("engagement_discovery", {})
     region = discovery.get("region", {})
@@ -146,7 +183,14 @@ def discover(config_path: Path | None = None) -> dict:
             for item in raw_results[:40]
         ]),
     )
-    payload = extract_json(complete_linkedin(SYSTEM, prompt))
+    try:
+        payload = extract_json(complete_linkedin(SYSTEM, prompt))
+    except Exception as exc:
+        logger.warning(
+            "[linkedin] Could not parse discovery JSON; writing raw review queue instead: %s",
+            exc,
+        )
+        payload = _fallback_payload(raw_results, config)
     if not isinstance(payload, dict):
         raise ValueError("Discovery response must be a JSON object")
 

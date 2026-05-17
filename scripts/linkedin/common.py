@@ -98,8 +98,13 @@ def extract_json(text: str) -> Any:
         return json.loads(match.group(1))
 
 
+def strip_fenced_blocks(text: str) -> str:
+    """Remove fenced examples before parsing markdown records."""
+    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+
+
 def next_idea_id(ideas_text: str) -> str:
-    ids = [int(n) for n in re.findall(r"IDEA-(\d{4})", ideas_text)]
+    ids = [int(n) for n in re.findall(r"IDEA-(\d{4})", strip_fenced_blocks(ideas_text))]
     return f"IDEA-{(max(ids) + 1) if ids else 1:04d}"
 
 
@@ -118,6 +123,7 @@ def slugify(text: str) -> str:
 
 
 def idea_blocks(ideas_text: str) -> list[dict[str, str]]:
+    ideas_text = strip_fenced_blocks(ideas_text)
     matches = list(re.finditer(r"^## (IDEA-\d{4}): (.+)$", ideas_text, re.MULTILINE))
     blocks: list[dict[str, str]] = []
     for idx, match in enumerate(matches):
