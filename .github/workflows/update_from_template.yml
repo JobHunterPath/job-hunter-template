@@ -42,6 +42,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEMPLATE_REPO_PAT: ${{ secrets.TEMPLATE_REPO_PAT }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           UPDATE_CONFIG: ${{ inputs.update_config }}
@@ -53,8 +54,17 @@ jobs:
           git config user.email "template-update-bot@users.noreply.github.com"
 
           git remote remove upstream 2>/dev/null || true
-          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
-          git fetch upstream "${UPSTREAM_BRANCH}"
+          if [ -n "${TEMPLATE_REPO_PAT}" ]; then
+            git remote add upstream "https://x-access-token:${TEMPLATE_REPO_PAT}@github.com/${UPSTREAM_REPO}.git"
+          else
+            git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          fi
+
+          if ! git fetch upstream "${UPSTREAM_BRANCH}"; then
+            echo "::error::Could not fetch ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
+            echo "::error::If the template repository is private, add a TEMPLATE_REPO_PAT repository secret with read access to ${UPSTREAM_REPO}."
+            exit 1
+          fi
 
           branch="template-update/${GITHUB_RUN_ID}"
           git checkout -b "$branch"

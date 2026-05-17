@@ -794,11 +794,61 @@ Add the secrets you use:
 - `EXA_API_KEY`: optional search fallback.
 - `RAPIDAPI_KEY`: optional, only if using JSearch.
 - `GH_PAT`: required for GitHub Actions to commit generated files back to your repository.
+- `TEMPLATE_REPO_PAT`: required only if the upstream template repo is private.
 
 If you use Ollama locally, you do not need an LLM API key for local runs. For
 GitHub-hosted Actions, use a cloud LLM provider instead.
 
 The secret names must match `config/api_config.yml`.
+
+### Create `TEMPLATE_REPO_PAT` For Private Template Updates
+
+Skip this section if `Job-Network-Projects/job-hunter-template` is public.
+
+If the template repo is private, the **Update From Template** workflow needs its
+own token to read it. Being added to the GitHub organization lets you open the
+repo in your browser, but the workflow runs as GitHub Actions inside your own
+repo. The built-in `GITHUB_TOKEN` can read your repo, but it cannot
+automatically read another private repo.
+
+Create a fine-grained personal access token from an account that can access the
+template repo:
+
+1. Open GitHub.
+2. Click your profile picture in the top-right corner.
+3. Go to **Settings**.
+4. Go to **Developer settings**.
+5. Go to **Personal access tokens**.
+6. Choose **Fine-grained tokens**.
+7. Click **Generate new token**.
+8. Use a clear name, for example:
+
+```text
+job-hunt-template-read
+```
+
+9. For **Resource owner**, select the owner of the template repo.
+10. For **Repository access**, choose **Only select repositories**.
+11. Select `Job-Network-Projects/job-hunter-template`.
+12. Under **Repository permissions**, set:
+
+```text
+Contents: Read-only
+```
+
+13. Generate the token and copy it immediately.
+14. In your repository, go to **Settings -> Secrets and variables -> Actions**.
+15. Add a repository secret named:
+
+```text
+TEMPLATE_REPO_PAT
+```
+
+16. Paste the token value.
+
+If the organization uses SAML/SSO or has token restrictions, authorize the token
+for the organization after creating it. If fine-grained tokens are blocked,
+create a classic token with the `repo` scope instead.
 
 ## 19. Run The Automation In GitHub
 
@@ -987,6 +1037,17 @@ By default, the workflow preserves:
 
 If a release adds new config fields, read the pull request description and this
 `SETUP.md`, then copy only the new fields you need into your own config files.
+
+If the workflow fails with:
+
+```text
+remote: Repository not found.
+fatal: repository 'https://github.com/Job-Network-Projects/job-hunter-template.git/' not found
+```
+
+the upstream template repo is private and the workflow cannot read it. Add the
+`TEMPLATE_REPO_PAT` secret described in section 18, then run **Update From
+Template** again.
 
 ### B. If You Have Local Uncommitted Changes
 
