@@ -15,8 +15,9 @@ automatically.
 ## Start Here
 
 For initial setup, read [SETUP.md](SETUP.md) first. It walks through the
-process step by step, including how to build your story bank, choose a resume
-layout, configure job search, and run the automation from GitHub.
+process step by step, including how to fill in project instructions, build your
+story bank, choose a resume layout, configure job search, and run the automation
+from GitHub.
 
 When using AI helpers in VS Code, use them only for personal setup files such as
 the story bank, resume, project instructions, and configs. Do not ask them to
@@ -30,7 +31,7 @@ your resume, story bank, generated jobs, and config files untouched by default.
 The pull request shows whether the template update is a patch, minor, or major
 version change.
 After merging that pull request, run `git pull origin main` locally. Detailed
-step-by-step update instructions are in [SETUP.md](SETUP.md#22-getting-future-template-updates).
+step-by-step update instructions are in [SETUP.md](SETUP.md#23-getting-future-template-updates).
 
 The GitHub workflows use a prebuilt GHCR runner image with Python, Playwright,
 and LaTeX already installed. The image is rebuilt automatically when
@@ -39,8 +40,8 @@ installing LaTeX on every job run.
 
 ## Quick Start
 
-1. Replace `story_bank.md` with raw notes and verified STAR stories from your experience.
-2. Customize `project_instructions.md` with your own profile, ID scheme, and chatbot prompts.
+1. Customize `project_instructions.md` with your own profile, ID scheme, and chatbot prompts.
+2. Replace `story_bank.md` with raw notes and verified STAR stories from your experience.
 3. Choose and customize a LaTeX resume:
    - `resume_double_column.tex` for the AltaCV double-column layout.
    - `resume_single_column.tex` for an ATS-friendly single-column layout.
@@ -53,7 +54,7 @@ installing LaTeX on every job run.
      content selection when an uncommented Projects section exists in your resume)
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
-7. Run the preflight checklist in [SETUP.md](SETUP.md#19-preflight-checklist-before-running-a-workflow), then run the pipeline through GitHub Actions.
+7. Run the preflight checklist in [SETUP.md](SETUP.md#20-preflight-checklist-before-running-a-workflow), then run the pipeline through GitHub Actions.
 8. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
 
 Scheduled GitHub hunts run enabled regions one hour apart, starting at

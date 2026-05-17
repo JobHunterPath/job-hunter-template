@@ -9,9 +9,9 @@ This private repository can search for jobs, score them against your profile,
 tailor a LaTeX resume, write cover letters from your story bank, and save the
 outputs in `jobs/`.
 
-Before running any workflow, finish the story bank, base resume, API config, job
-search config, scoring config, and cover letter profile. The automation works
-best when the source material is already clean.
+Before running any workflow, finish the project instructions, story bank, base
+resume, API config, job search config, scoring config, and cover letter profile.
+The automation works best when the source material is already clean.
 
 Important: when using Claude Code, Codex, Copilot, or any other AI helper in VS
 Code, use it only to edit your personal files: resume, story bank, project
@@ -110,7 +110,8 @@ Use the AI helper for personal setup only. It should not edit automation code,
 tests, workflows, Docker files, or scripts.
 
 If you do not want to install an AI coding helper, the browser-chatbot prompts
-in sections 9 and 10 still work. They require more copying and pasting.
+in the project-instructions, story-bank, and resume sections still work. They
+require more copying and pasting.
 
 ## 6. Install Python Requirements Directly
 
@@ -202,10 +203,73 @@ profile:
   resume_tex: "resume_single_column.tex"
 ```
 
-## 9. Build Your Story Bank
+## 9. Fill In Project Instructions
+
+Open `project_instructions.md` before building the story bank. This file tells
+the AI helper who you are, what roles you are targeting, what rules to follow,
+and how story IDs should be handled.
+
+Replace the placeholder profile under **About Me** with your own factual
+information:
+
+- Current role
+- Years of experience
+- Target roles
+- Target industries
+- Target locations
+- Industries or companies to avoid
+- Strongest proof points
+- Honest gaps
+
+Also review the house rules and story ID guidance. Keep the rules strict:
+project instructions should tell the AI not to invent metrics, titles,
+companies, dates, skills, or outcomes.
+
+### AI Helper Prompt
+
+Use this prompt if you want Claude Code, Codex, Copilot, or another repo-aware
+tool to help update only `project_instructions.md`:
+
+```text
+Help me personalize project_instructions.md before I build my story bank.
+
+Files to edit:
+- project_instructions.md
+
+Do not edit:
+- story_bank.md
+- resume .tex files
+- config files
+- scripts/
+- tests/
+- .github/workflows/
+- Dockerfile
+- requirements.txt
+- any automation code
+
+Task:
+- Replace the placeholder "About Me" section with my factual profile.
+- Keep the existing role, house rules, story ID guidance, and prompt structure.
+- Adjust examples only if needed to match my target roles and story ID scheme.
+
+Hard rules:
+- Do not invent metrics, employers, titles, skills, dates, or outcomes.
+- Keep instructions strict and factual.
+- Preserve markdown headings and prompt formats.
+- If you think code or scripts need a fix, stop and tell me to raise a template
+  repo pull request instead.
+
+My profile notes:
+[PASTE YOUR BACKGROUND, TARGET ROLES, TARGET LOCATIONS, PROOF POINTS, AND GAPS HERE]
+```
+
+## 10. Build Your Story Bank
 
 Open `story_bank.md`. The format matters because cover letters and project
 tailoring use this file as source material.
+
+Use the personalized `project_instructions.md` from the previous step while
+building or refining the story bank.
 
 The story bank has:
 
@@ -243,7 +307,7 @@ Help me build story_bank.md without changing its standard format.
 
 Files to read or edit:
 - story_bank.md
-- project_instructions.md
+- project_instructions.md, which should already be personalized
 
 Do not edit:
 - scripts/
@@ -310,7 +374,7 @@ My raw notes:
 [PASTE YOUR NOTES HERE]
 ```
 
-## 10. Prepare Your Base Resume Before Any Workflow
+## 11. Prepare Your Base Resume Before Any Workflow
 
 Open the resume file you selected and replace placeholders such as
 `Candidate Name`, `candidate@example.com`, `Target City`, `Example Company`, and
@@ -392,7 +456,7 @@ My resume/profile notes:
 Then replace the content of the selected `.tex` file with the returned LaTeX and
 build or run a workflow later to verify it.
 
-## 11. Update Your Cover Letter Profile
+## 12. Update Your Cover Letter Profile
 
 Open `config/cover_letter_config.yml`.
 
@@ -406,7 +470,7 @@ closing:
 
 Use your real name.
 
-## 12. Configure The LLM Provider
+## 13. Configure The LLM Provider
 
 Open `config/api_config.yml`.
 
@@ -451,7 +515,7 @@ Optional search-provider secrets:
 The pipeline can still use direct ATS scraping, HTTP scraping, Playwright, and
 temporary SearXNG in GitHub Actions when optional search keys are missing.
 
-## 13. Configure Job Search Regions And Companies
+## 14. Configure Job Search Regions And Companies
 
 Open `config/search_config.yml`.
 
@@ -521,7 +585,7 @@ regions:
         career_url: boards.greenhouse.io/example
 ```
 
-## 14. Set Scoring And Tailoring Rules
+## 15. Set Scoring And Tailoring Rules
 
 Open `config/scoring_config.yml`.
 
@@ -539,7 +603,7 @@ filtering.
 Open `config/tailoring_config.yml` only if you need to change what the AI can
 modify. The default forbidden rules protect against invented experience.
 
-## 15. Add API Keys In GitHub
+## 16. Add API Keys In GitHub
 
 Do not paste API keys into files.
 
@@ -587,7 +651,7 @@ Create `TEMPLATE_REPO_PAT` from an account that can access the template repo:
 
 If your organization uses SAML/SSO, authorize the token for the organization.
 
-## 16. Optional: Test Locally
+## 17. Optional: Test Locally
 
 Run tests:
 
@@ -598,7 +662,7 @@ python -m pytest -q
 If local tests are too much, you can continue with GitHub Actions after secrets
 are configured.
 
-## 17. Optional: Run Local Commands
+## 18. Optional: Run Local Commands
 
 Run one direct job link locally:
 
@@ -623,7 +687,7 @@ PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
 LinkedIn support never posts, comments, follows, connects, messages, or likes.
 Review every output manually.
 
-## 18. Set Up Faster GitHub Actions With The Runner Image
+## 19. Set Up Faster GitHub Actions With The Runner Image
 
 The workflows can use a prebuilt GHCR image with Python dependencies,
 Playwright Chromium, and LaTeX already installed. This makes runs faster.
@@ -648,10 +712,11 @@ Do this before the first real workflow run. If the image is missing, workflows
 can still use a slower fallback, but the recommended GitHub Actions setup is to
 use the runner image.
 
-## 19. Preflight Checklist Before Running A Workflow
+## 20. Preflight Checklist Before Running A Workflow
 
 Do not run workflows until these are done:
 
+- `project_instructions.md` has your factual profile, target roles, and rules.
 - `story_bank.md` has real final STAR stories, not only examples.
 - `config/api_config.yml` points to the resume file you actually edited.
 - The active resume `.tex` has your real base resume content.
@@ -669,7 +734,7 @@ git commit -m "complete initial job hunt setup"
 git push origin main
 ```
 
-## 20. Run The Automation In GitHub
+## 21. Run The Automation In GitHub
 
 For specific job links:
 
@@ -692,7 +757,7 @@ Scheduled hunts run enabled regions one hour apart starting at 06:00
 Europe/Berlin time on weekdays. Run the workflow manually once before relying on
 the schedule.
 
-## 21. Review The Output
+## 22. Review The Output
 
 Each processed job creates:
 
@@ -714,7 +779,7 @@ Always review the tailored resume and cover letter before applying.
 Each hunt run tailors at most 15 matched jobs. If more than 15 jobs pass the
 score threshold, the pipeline processes the 15 highest-scoring matches first.
 
-## 22. Getting Future Template Updates
+## 23. Getting Future Template Updates
 
 Use **Actions -> Update From Template** when you want the latest maintained
 code, workflows, dependencies, and docs.
@@ -734,6 +799,43 @@ code, workflows, dependencies, and docs.
 git checkout main
 git pull origin main
 ```
+
+### If The Update Pull Request Has Conflicts
+
+Conflicts mean GitHub cannot safely combine your files with the template update
+without a decision from you. This usually happens when both your repo and the
+template changed the same maintained file.
+
+Recommended option for non-technical users:
+
+1. Do not click random conflict buttons.
+2. Ask a technical person to review the pull request.
+3. Tell them your personal files should be protected:
+   - resume `.tex` files
+   - `story_bank.md`
+   - `project_instructions.md`
+   - files in `jobs/`
+   - your personal config files, unless you intentionally enabled `update_config`
+4. After they resolve the conflicts and merge the PR, run:
+
+```bash
+git checkout main
+git pull origin main
+```
+
+If you want to resolve conflicts yourself in GitHub:
+
+1. Open the update pull request.
+2. Click **Resolve conflicts** if GitHub shows the button.
+3. For each conflicted file, choose the template version for maintained files
+   such as `scripts/`, `tests/`, workflows, `README.md`, and `SETUP.md`.
+4. Keep your version for personal files such as resumes, story bank, project
+   instructions, generated jobs, and configs.
+5. Remove all conflict marker lines. They are the lines that start with
+   `<<<<<<<`, `=======`, or `>>>>>>>`.
+
+6. Click **Mark as resolved**.
+7. Merge the pull request only after the files look correct.
 
 If the workflow cannot read the private template repo, confirm this repo has a
 `TEMPLATE_REPO_PAT` secret with read access to
