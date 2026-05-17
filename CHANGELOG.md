@@ -5,7 +5,7 @@
 - Synced reusable template updates from the private source repository.
 
 Source commits:
-- `e3bc081` search: add vancouver and dublin regions
+- `592c96a` fix(linkedin): harden content workflow runs
 
 
 ## 2.0.0 - 2026-05-17
