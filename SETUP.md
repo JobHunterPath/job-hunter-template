@@ -246,6 +246,15 @@ Rules:
 - Do not renumber old IDs.
 - Add new IDs to the allocation log at the bottom of `story_bank.md`.
 
+**Project-tailoring prefixes:** The automated tailorer uses story ID prefixes to
+decide which stories are eligible for the resume Projects section. The default
+allowed prefixes in `config/tailoring_config.yml` are `TECH`, `UNI`, `SIDE`, and
+`THESIS`. Use these prefixes (or add your own under
+`tailoring.rules.projects.allowed_story_id_prefixes`) for any stories you want
+the AI to draw on when selecting project content. The tailorer only activates
+project tailoring when an uncommented Projects section already exists in the
+resume — it will never uncomment a commented-out section or add a new one.
+
 ### Raw Notes To Final STAR Stories
 
 Use `project_instructions.md` with an LLM chatbot to convert raw notes into
@@ -261,8 +270,8 @@ Simple workflow:
 6. Move only accurate, defensible stories into `Final - refined STAR stories`.
 7. Update the allocation log.
 
-The automation uses the final refined stories for cover letters, so keep that
-section factual and clean.
+The automation uses the final refined stories for cover letters and project
+section tailoring, so keep that section factual and clean.
 
 If you do not have a verified number, use a concrete scope instead, such as
 team size, user group, launch timeline, or process improvement.

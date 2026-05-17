@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `c872d0a` merge: merge main into feature-branch
+
+
 ## 2.2.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
