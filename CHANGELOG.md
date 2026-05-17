@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.5 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `4d3168b` fix(template): use repo-scoped runner images
+
+
 ## 2.8.4 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.

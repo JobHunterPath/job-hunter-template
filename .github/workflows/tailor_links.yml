@@ -68,14 +68,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RUNNER_IMAGE_OVERRIDE: ${{ vars.JOB_HUNT_RUNNER_IMAGE }}
         run: |
-          if [ -n "$RUNNER_IMAGE_OVERRIDE" ]; then
-            image="$RUNNER_IMAGE_OVERRIDE"
-          else
-            owner="${GITHUB_REPOSITORY_OWNER,,}"
-            image="ghcr.io/${owner}/job-hunt-runner:latest"
-          fi
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/job-hunt-runner:latest"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
           if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
