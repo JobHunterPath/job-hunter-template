@@ -61,6 +61,23 @@ def test_next_idea_id_increments():
     assert common.next_idea_id("## IDEA-0007: Existing") == "IDEA-0008"
 
 
+def test_idea_parsing_ignores_fenced_examples():
+    text = """# Ideas
+
+```markdown
+## IDEA-0001: Example only
+
+Status: raw
+```
+
+## IDEA-0003: Real idea
+
+Status: raw
+"""
+    assert common.next_idea_id(text) == "IDEA-0004"
+    assert [block["id"] for block in common.unconverted_ideas(text, "raw")] == ["IDEA-0003"]
+
+
 def test_linkedin_yaml_files_parse():
     files = [
         ".github/workflows/linkedin_content.yml",
@@ -170,3 +187,22 @@ def test_discover_engagement_writes_review_queues(tmp_path):
     assert len(result["people"]) == 1
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
     assert "Suggested comment" in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+
+
+def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
+    cfg = _config(tmp_path)
+    search_result = [{
+        "url": "https://www.linkedin.com/in/example",
+        "title": "Example Product Leader",
+        "description": "Posts about platform product management.",
+        "source": "SearXNG",
+        "query": 'site:linkedin.com/in "platform product management"',
+    }]
+
+    with patch("linkedin.discover_engagement.search_web", return_value=search_result), \
+         patch("linkedin.discover_engagement.complete_linkedin", return_value='{"people": [{"name": "broken"}]'):
+        result = discover_engagement.discover(cfg)
+
+    assert len(result["people"]) == 1
+    assert result["people"][0]["suggested_action"] == "review manually"
+    assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
