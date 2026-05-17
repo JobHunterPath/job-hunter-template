@@ -1,21 +1,28 @@
 # Setup Guide
 
-Follow this guide from top to bottom. It assumes you are new to GitHub, Git,
-VS Code, Docker, and LaTeX.
+Follow this guide from top to bottom. It is written for non-technical users who
+want to use GitHub Actions as the main way to run the job-hunt automation.
 
 ## What This Tool Does
 
-This repository can search for jobs, score them against your profile, tailor a
-LaTeX resume, write cover letters from your story bank, and save the outputs in
-`jobs/`. The template includes this folder empty at first.
+This private repository can search for jobs, score them against your profile,
+tailor a LaTeX resume, write cover letters from your story bank, and save the
+outputs in `jobs/`.
 
-Before running the automation, you will set up your computer, create your own
-private copy of the template, edit the resume and config files, test locally,
-then run GitHub Actions.
+Before running any workflow, finish the story bank, base resume, API config, job
+search config, scoring config, and cover letter profile. The automation works
+best when the source material is already clean.
+
+Important: when using Claude Code, Codex, Copilot, or any other AI helper in VS
+Code, use it only to edit your personal files: resume, story bank, project
+instructions, and config files. Do not ask it to change `scripts/`, `tests/`,
+`.github/workflows/`, `Dockerfile`, or other code files in your local repo. If
+you find a real code problem, ask a technical person to create a pull request
+against the shared template repo instead.
 
 ## 1. Install The Required Apps
 
-Install these first:
+Install:
 
 1. **Git** from `https://git-scm.com/downloads`
 2. **Visual Studio Code** from `https://code.visualstudio.com/`
@@ -25,34 +32,9 @@ Install these first:
 After installing Docker Desktop, open it once and wait until it says the Docker
 engine is running.
 
-## 2. Set Up Git On Your Computer
+## 2. Create Your Own Private Repository
 
-Git needs your name and email so your commits are labeled correctly.
-
-Open VS Code, then open a terminal:
-
-```text
-Terminal -> New Terminal
-```
-
-Run these commands with your own name and email:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
-```
-
-Check that it worked:
-
-```bash
-git config --global --list
-```
-
-GitHub does not accept account passwords for Git pushes. The easiest option is
-to sign in through VS Code when prompted. If GitHub asks for a password in the
-terminal, use a GitHub personal access token instead of your GitHub password.
-
-## 3. Create Your Own Private Repository
+The job-hunter template is private and should stay private.
 
 1. Open the shared template repository on GitHub.
 2. Click **Use this template**.
@@ -60,18 +42,16 @@ terminal, use a GitHub personal access token instead of your GitHub password.
 4. Set visibility to **Private**.
 5. Create the repository.
 
-Your new private repository is now your personal job-hunt workspace.
+Your new private repository is your personal job-hunt workspace.
 
-## 4. Clone Your Repository In VS Code
-
-The easiest way:
+## 3. Clone Your Repository In VS Code
 
 1. Open VS Code.
 2. Click **Source Control** in the left sidebar.
 3. Click **Clone Repository**.
 4. Paste your repository URL from GitHub.
 5. Choose a folder on your computer.
-6. Click **Open** when VS Code asks if you want to open the cloned repository.
+6. Click **Open** when VS Code asks.
 
 Alternative terminal command:
 
@@ -81,9 +61,23 @@ cd YOUR_REPOSITORY
 code .
 ```
 
-## 5. Install Recommended VS Code Extensions
+## 4. Set Up Git On Your Computer
 
-In VS Code, open **Extensions** and install:
+Open **Terminal -> New Terminal** in VS Code and run:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+git config --global --list
+```
+
+GitHub does not accept account passwords for Git pushes. If VS Code or Git asks
+you to sign in, use the browser sign-in flow. If a terminal asks for a password,
+use a GitHub personal access token instead of your GitHub password.
+
+## 5. Install VS Code Extensions And An AI Helper
+
+Install these VS Code extensions:
 
 - **Python** by Microsoft
 - **Pylance** by Microsoft
@@ -92,50 +86,65 @@ In VS Code, open **Extensions** and install:
 - **Docker** by Microsoft
 - **GitHub Pull Requests and Issues** by GitHub
 
-These make it easier to edit Python, YAML configs, LaTeX resumes, Docker setup,
-and GitHub pull requests.
+Also install one AI coding helper that can see the files in your local repo.
+This is strongly recommended because it lets the AI preserve the exact format of
+your story bank, resume, and config files.
 
-## 6. Create The Python Environment
+Choose one:
 
-In the VS Code terminal, run:
+- **GitHub Copilot:** install the GitHub Copilot extension in VS Code and sign in
+  with GitHub.
+- **Claude Code:** install the Claude Code VS Code extension, or install the CLI
+  from Anthropic's official Claude Code docs, then sign in.
+- **Codex:** install Node.js if needed, then run:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+npm install -g @openai/codex
+```
+
+Then open the repo folder in VS Code and start the tool from VS Code or the
+terminal. When the tool asks for permission to read or edit files, allow access
+only to this repository.
+
+Use the AI helper for personal setup only. It should not edit automation code,
+tests, workflows, Docker files, or scripts.
+
+If you do not want to install an AI coding helper, the browser-chatbot prompts
+in sections 9 and 10 still work. They require more copying and pasting.
+
+## 6. Install Python Requirements Directly
+
+No virtual environment is required for this guide.
+
+In the VS Code terminal, run these from the repository root:
+
+```bash
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-playwright install chromium
+python -m playwright install chromium
 ```
 
-On macOS/Linux, activate with:
+On Windows, if `python` is not recognized, try:
 
 ```bash
-source .venv/bin/activate
+py -m pip install --upgrade pip
+py -m pip install -r requirements.txt
+py -m playwright install chromium
 ```
 
-If VS Code asks which Python interpreter to use, choose the one inside `.venv`.
+## 7. Optional: Set Up Local LaTeX Preview
 
-## 7. Set Up Docker For LaTeX
+Most users can rely on GitHub Actions to create PDFs. Do this only if you want
+to preview or rework resume PDFs on your laptop.
 
 Check Docker:
 
 ```bash
 docker --version
-```
-
-Test the LaTeX Docker image:
-
-```bash
 docker run --rm texlive/texlive:latest pdflatex --version
 ```
 
-The first run can take a while because Docker downloads the TeX Live image.
-
-## 8. Add VS Code LaTeX Build Settings
-
-Create a folder named `.vscode` in the repository root if it does not exist.
-Inside it, create `settings.json`.
-
-Paste this:
+Create `.vscode/settings.json` and paste:
 
 ```json
 {
@@ -169,273 +178,246 @@ Paste this:
 }
 ```
 
-To build a resume PDF:
+To build locally, open `resume_double_column.tex` or
+`resume_single_column.tex`, then run **LaTeX Workshop: Build LaTeX project**.
 
-1. Open `resume_double_column.tex` or `resume_single_column.tex`.
-2. Open the Command Palette with `Ctrl+Shift+P`.
-3. Run **LaTeX Workshop: Build LaTeX project**.
+## 8. Choose Your Resume Layout
 
-If Docker is not running, start Docker Desktop and try again.
-
-## 9. Choose Your Resume Layout
-
-This template includes two resume layouts:
+This template includes:
 
 - `resume_double_column.tex`: polished double-column AltaCV layout.
 - `resume_single_column.tex`: simpler single-column ATS-friendly layout.
 
-The automation uses the file selected in `config/api_config.yml`.
-
-Open `config/api_config.yml` and find:
+Open `config/api_config.yml` and choose the file the automation should use:
 
 ```yaml
 profile:
   resume_tex: "resume_double_column.tex"
 ```
 
-Change it to this if you prefer the single-column resume:
+For the single-column version:
 
 ```yaml
 profile:
   resume_tex: "resume_single_column.tex"
 ```
 
-## 10. Personalize Your Resume
+## 9. Build Your Story Bank
 
-Open the resume file you selected and replace placeholders such as:
+Open `story_bank.md`. The format matters because cover letters and project
+tailoring use this file as source material.
 
-- `Candidate Name`
-- `candidate@example.com`
-- `Target City`
-- `Example Company`
-- example bullet points
+The story bank has:
 
-Use only real information you can defend in an interview. Do not invent
-metrics, titles, skills, companies, or dates.
+- **Draft - Raw Notes:** rough notes about work, education, projects,
+  volunteering, or side projects.
+- **Final - refined STAR stories:** polished, factual stories in Situation,
+  Task, Action, Result format.
+- **Allocation Log:** a table that prevents duplicate story IDs.
 
-## 11. Fill In Your Story Bank
-
-Open `story_bank.md`.
-
-The story bank has two layers:
-
-1. **Draft - Raw Notes:** messy notes about your work, projects, volunteering,
-   education, or side projects.
-2. **Final - refined STAR stories:** polished stories that a chatbot has helped
-   convert into Situation, Task, Action, Result format.
-
-Start by adding raw notes. Do not try to make them perfect.
-
-### Story IDs
-
-Each story has a stable ID that you create. IDs help you categorize your
-experiences and retrieve them later when tailoring to a job.
+Story IDs must stay stable. Do not reuse or renumber old IDs.
 
 Examples:
 
-- `ACME-PM-01`: one company, one Product Manager role
-- `SHOP-PO-01`: one company, one Product Owner role
+- `ACME-PM-01`: company or role story
 - `TECH-01`: technical project
-- `VOL-01`: volunteer project
 - `UNI-01`: university project
 - `SIDE-01`: side project
+- `VOL-01`: volunteer project
 
-Rules:
+### Manual Flow
 
-- Do not reuse IDs.
-- Do not renumber old IDs.
-- Add new IDs to the allocation log at the bottom of `story_bank.md`.
+1. Add rough notes under **Draft - Raw Notes**.
+2. Give each story a unique ID.
+3. Convert the strongest notes into STAR format under
+   **Final - refined STAR stories**.
+4. Add each ID to the **Allocation Log**.
+5. Keep weak or unverified material in Draft until you can verify it.
 
-**Project-tailoring prefixes:** The automated tailorer uses story ID prefixes to
-decide which stories are eligible for the resume Projects section. The default
-allowed prefixes in `config/tailoring_config.yml` are `TECH`, `UNI`, `SIDE`, and
-`THESIS`. Use these prefixes (or add your own under
-`tailoring.rules.projects.allowed_story_id_prefixes`) for any stories you want
-the AI to draw on when selecting project content. The tailorer only activates
-project tailoring when an uncommented Projects section already exists in the
-resume — it will never uncomment a commented-out section or add a new one.
+### Best Option: Use An AI Helper In VS Code
 
-### Raw Notes To Final STAR Stories
+Paste this prompt into Claude Code, Codex, Copilot, or another repo-aware tool:
 
-Use `project_instructions.md` with an LLM chatbot to convert raw notes into
-final STAR stories.
+```text
+Help me build story_bank.md without changing its standard format.
 
-Simple workflow:
+Files to read or edit:
+- story_bank.md
+- project_instructions.md
 
-1. Add raw notes under `Draft - Raw Notes` in `story_bank.md`.
-2. Open `project_instructions.md`.
-3. Copy **Prompt 1 - Initial Story Refinement** into your chatbot.
-4. Paste the relevant raw notes below the prompt.
-5. Review the chatbot output carefully.
-6. Move only accurate, defensible stories into `Final - refined STAR stories`.
-7. Update the allocation log.
+Do not edit:
+- scripts/
+- tests/
+- .github/workflows/
+- Dockerfile
+- requirements.txt
+- any automation code
 
-The automation uses the final refined stories for cover letters and project
-section tailoring, so keep that section factual and clean.
+Task:
+- Add my raw notes under "Draft - Raw Notes".
+- Create final STAR stories under "Final - refined STAR stories" only when the
+  notes are strong enough.
+- Update the Allocation Log.
 
-If you do not have a verified number, use a concrete scope instead, such as
-team size, user group, launch timeline, or process improvement.
+Hard rules:
+- Preserve all existing headings and table formats in story_bank.md.
+- Keep story IDs stable. Do not reuse or renumber IDs.
+- Do not invent metrics, employers, titles, skills, dates, or outcomes.
+- If a metric is not verified, use a concrete scope anchor instead.
+- If a story is weak, keep it in Draft and explain what is missing.
+- Keep each final story in this format:
+  Situation, Task, Action bullets, Result bullets, Tags.
+- If you think code or scripts need a fix, stop and tell me to raise a template
+  repo pull request instead.
 
-The story bank and project instruction file paths are configurable in
-`config/api_config.yml`:
-
-```yaml
-profile:
-  story_bank: "story_bank.md"
-  project_instructions: "project_instructions.md"
+My raw notes:
+[PASTE YOUR ACHIEVEMENTS, TASKS, PROJECTS, VOLUNTEERING, EDUCATION, AND RESULTS HERE]
 ```
 
-## 12. Update Your Cover Letter Profile
+Review every final story. If you cannot defend it in an interview, move it back
+to Draft or rewrite it.
+
+### Browser Chatbot Option
+
+1. Copy the full current `story_bank.md`.
+2. Copy the relevant parts of `project_instructions.md`.
+3. Paste both into a browser chatbot with your notes and this prompt:
+
+```text
+I need help updating my story bank for a job-hunt automation repo.
+
+Return an updated story_bank.md that preserves the exact standard format.
+
+Hard rules:
+- Keep these headings: Story ID Scheme, Draft - Raw Notes, Final - refined STAR stories, Allocation Log.
+- Preserve the Allocation Log markdown table format.
+- Keep story IDs stable. Do not reuse or renumber IDs.
+- Do not invent metrics, employers, titles, skills, dates, or outcomes.
+- If no metric is verified, use a concrete scope anchor such as team size,
+  stakeholder count, launch timeline, release cadence, user group, or workflow scope.
+- Final stories must use: Situation, Task, Action bullets, Result bullets, Tags.
+- Put uncertain or weak material in Draft, not Final.
+- Do not suggest changes to scripts, tests, workflows, Docker files, or code.
+- Return only the full updated story_bank.md, no explanation.
+
+Current story_bank.md:
+[PASTE CURRENT STORY_BANK.MD HERE]
+
+Project instructions:
+[PASTE RELEVANT PROJECT_INSTRUCTIONS.MD CONTENT HERE]
+
+My raw notes:
+[PASTE YOUR NOTES HERE]
+```
+
+## 10. Prepare Your Base Resume Before Any Workflow
+
+Open the resume file you selected and replace placeholders such as
+`Candidate Name`, `candidate@example.com`, `Target City`, `Example Company`, and
+example bullet points.
+
+Use only real information you can defend in an interview. Do not invent metrics,
+titles, companies, skills, or dates.
+
+### Best Option: Use An AI Helper In VS Code
+
+Open your AI helper in this repo and paste:
+
+```text
+I need you to update my base LaTeX resume without changing the LaTeX structure.
+
+Files to use:
+- The resume .tex file I selected in section 8.
+- story_bank.md if useful.
+
+My resume/profile notes are below.
+
+Do not edit:
+- scripts/
+- tests/
+- .github/workflows/
+- Dockerfile
+- requirements.txt
+- any automation code
+
+Rules:
+- Preserve the existing LaTeX commands, sections, escaping, and layout.
+- Replace placeholder content with my real content.
+- Do not invent metrics, employers, dates, titles, skills, or outcomes.
+- If a detail is missing, leave a clear TODO comment instead of making it up.
+- Keep the resume to the existing page target.
+- Do not rewrite config files.
+- If you think code or scripts need a fix, stop and tell me to raise a template
+  repo pull request instead.
+
+My notes:
+[PASTE YOUR EXISTING RESUME TEXT OR PROFILE NOTES HERE]
+```
+
+Review the changed `.tex` file before committing it.
+
+### Browser Chatbot Option
+
+Use this when you do not have Claude Code, Codex, Copilot, or a similar local
+repo-aware tool.
+
+1. Open your selected resume `.tex` file.
+2. Copy the full file into a browser chatbot.
+3. Paste your current resume text or notes.
+4. Use this prompt:
+
+```text
+I will paste a LaTeX resume template and my current resume/profile notes.
+
+Task:
+Return a complete updated LaTeX resume that preserves the template's LaTeX
+structure and replaces placeholders with my real content.
+
+Hard rules:
+- Do not change LaTeX commands unless absolutely necessary.
+- Do not invent metrics, employers, dates, titles, skills, or outcomes.
+- Escape LaTeX special characters when needed, such as &, %, $, #, and _.
+- Keep the same sections unless my notes clearly support a better section.
+- If information is missing, write TODO in plain text inside the relevant field.
+- Do not suggest changes to scripts, tests, workflows, Docker files, or code.
+- Return only the full updated LaTeX file, no explanation.
+
+LaTeX template:
+[PASTE THE FULL .TEX FILE HERE]
+
+My resume/profile notes:
+[PASTE YOUR CURRENT RESUME OR NOTES HERE]
+```
+
+Then replace the content of the selected `.tex` file with the returned LaTeX and
+build or run a workflow later to verify it.
+
+## 11. Update Your Cover Letter Profile
 
 Open `config/cover_letter_config.yml`.
 
-Find:
-
-```yaml
-candidate_background:
-```
-
-Replace the example text with a short factual summary of your background.
-
-Also update the closing:
+Replace `candidate_background` with a short factual summary of your background.
+Also update:
 
 ```yaml
 closing:
   format: "Best regards,\nCandidate Name"
 ```
 
-Replace `Candidate Name` with your name.
+Use your real name.
 
-## 13. Configure Job Search
+## 12. Configure The LLM Provider
 
-Open `config/search_config.yml`.
+Open `config/api_config.yml`.
 
-The search config uses regions to define locations. Each region represents a city or area with its own set of companies.
+Supported providers:
 
-### Basic Configuration
+- `anthropic`
+- `openai`
+- `google`
+- `ollama`
 
-For a single location, update the `berlin` region:
-
-- `location`: your target city or region (e.g., "Berlin", "Munich").
-- `country`: your target country code, such as `DE`, `GB`, or `US`.
-- `job_titles`: the roles you want (e.g., "Product Manager", "Product Owner").
-- `exclusion_rules.excluded_title_terms`: title terms you never want processed,
-  such as "engineer", "working student", "intern", or terms outside your target
-  role family.
-- `companies`: companies you want the automation to check.
-- `excluded_companies`: companies you never want to process.
-
-Example company entry:
-
-```yaml
-- name: Example Company
-  career_url: boards.greenhouse.io/example
-```
-
-Common career URL formats:
-
-- `boards.greenhouse.io/companyname`
-- `jobs.lever.co/companyname`
-- `jobs.smartrecruiters.com/companyname`
-- `careers.companyname.com`
-
-### Adding Multiple Locations
-
-To search in multiple cities or regions:
-
-1. Copy the entire `berlin` region block.
-2. Paste it below and change the region name (e.g., `munich`, `hamburg`, `london`).
-3. Set `enabled: true` to activate the new region.
-4. Update `location`, `country`, `search_lang`, and `description` for the new area.
-5. Replace the `companies` list with companies specific to that location.
-6. Companies from all enabled regions will be scraped daily.
-
-Example for adding Munich:
-
-```yaml
-regions:
-  berlin:
-    # ... existing berlin config ...
-
-  munich:
-    enabled: true
-    country: "DE"
-    search_lang: "en"
-    location: "Munich"
-    description: "Munich tech companies"
-    companies:
-      - name: Example Munich Company
-        career_url: boards.greenhouse.io/examplemunich
-      # Add more Munich companies...
-```
-
-You can have as many regions as needed. Disable regions by setting `enabled: false`.
-
-## 14. Set Your Scoring Rules
-
-Open `config/scoring_config.yml`.
-
-Important fields:
-
-```yaml
-min_fit_score: 70
-max_years_experience_required: 5
-```
-
-Use a lower `min_fit_score` if you want more jobs to pass. Use a higher score
-if you want stricter filtering.
-
-## 15. Get API Keys Or Set Up A Local LLM
-
-The automation needs two kinds of services:
-
-- an LLM provider for validation, scoring, tailoring, and cover letters
-- optional search providers for broad discovery when direct scraping is not enough
-
-You can use a cloud LLM provider, or you can run a local LLM with Ollama.
-
-### Option A: Anthropic Claude
-
-Use this if you want strong resume and cover-letter quality with minimal setup.
-
-1. Go to `https://console.anthropic.com/`.
-2. Create or sign in to your account.
-3. Add billing if required.
-4. Open API keys in the console.
-5. Create a new key.
-6. Copy it once and store it safely.
-
-Use this secret name:
-
-```text
-ANTHROPIC_API_KEY
-```
-
-In `config/api_config.yml`, keep:
-
-```yaml
-llm:
-  default_provider: anthropic
-```
-
-### Option B: OpenAI
-
-Use this if you prefer OpenAI models.
-
-1. Go to `https://platform.openai.com/`.
-2. Create or sign in to your account.
-3. Create a project if prompted.
-4. Open API keys.
-5. Create a new API key.
-6. Copy it once and store it safely.
-
-Use this secret name:
-
-```text
-OPENAI_API_KEY
-```
-
-In `config/api_config.yml`, set:
+To switch everything to OpenAI, for example:
 
 ```yaml
 llm:
@@ -446,246 +428,166 @@ llm:
     tailoring: openai
     cover_letter: openai
     discovery: openai
+    linkedin: openai
+    jd_extraction: openai
 ```
 
-Install the OpenAI Python package:
+Use the matching secret name:
 
-```bash
-python -m pip install openai
-```
+- Anthropic: `ANTHROPIC_API_KEY`
+- OpenAI: `OPENAI_API_KEY`
+- Google Gemini: `GOOGLE_API_KEY`
 
-### Option C: Google Gemini
+Ollama can work locally, but GitHub-hosted Actions cannot use Ollama running on
+your laptop. Use Anthropic, OpenAI, or Google for scheduled GitHub Actions.
 
-Use this if you prefer Google Gemini.
+Optional search-provider secrets:
 
-1. Go to `https://aistudio.google.com/`.
-2. Sign in with your Google account.
-3. Open API keys.
-4. Create a new API key.
-5. Copy it once and store it safely.
+- `BRAVE_API_KEY`
+- `TAVILY_API_KEY`
+- `EXA_API_KEY`
+- `RAPIDAPI_KEY`
 
-Use this secret name:
+The pipeline can still use direct ATS scraping, HTTP scraping, Playwright, and
+temporary SearXNG in GitHub Actions when optional search keys are missing.
+
+## 13. Configure Job Search Regions And Companies
+
+Open `config/search_config.yml`.
+
+For each region, update:
+
+- `enabled`
+- `country`
+- `search_lang`
+- `location`
+- `description`
+- `companies`
+
+Update `global_search.job_titles` with the roles you want. Update
+`exclusion_rules.excluded_title_terms` with roles you do not want, such as
+`engineer`, `intern`, or `working student`.
+
+### Prompt To Find 50 Initial Companies
+
+Use this prompt in an AI helper or browser chatbot before waiting for discovery.
+If you use an AI helper in VS Code, ask it to edit only `config/search_config.yml`
+and not any code files.
 
 ```text
-GOOGLE_API_KEY
+Find 50 companies for my initial job-search region.
+
+Target region:
+[CITY / COUNTRY / REMOTE REGION]
+
+Target roles:
+[ROLE TITLES, FOR EXAMPLE PRODUCT MANAGER, PRODUCT OWNER]
+
+Preferences:
+[INDUSTRIES, COMPANY SIZE, LANGUAGE REQUIREMENTS, REMOTE/HYBRID/ONSITE]
+
+Avoid:
+[COMPANIES OR INDUSTRIES TO EXCLUDE]
+
+Return YAML only in this exact format:
+
+companies:
+  - name: Company Name
+    career_url: company-career-domain-or-ats-url
+
+Rules:
+- Use company career pages or ATS board URLs, not job-detail URLs.
+- Prefer Greenhouse, Lever, SmartRecruiters, Ashby, Personio, Workday, or company careers pages.
+- Do not include duplicate companies.
+- Do not include companies from my avoid list.
+- If unsure about a career URL, include the main careers page domain.
+- Do not change scripts, tests, workflows, Docker files, or automation code.
 ```
 
-In `config/api_config.yml`, set:
+Paste the returned company list under the right region in `config/search_config.yml`.
+
+Example:
 
 ```yaml
-llm:
-  default_provider: google
-  providers:
-    validation: google
-    scoring: google
-    tailoring: google
-    cover_letter: google
-    discovery: google
+regions:
+  primary:
+    enabled: true
+    country: "DE"
+    search_lang: "en"
+    location: "Berlin"
+    description: "Berlin product roles"
+    companies:
+      - name: Example Company
+        career_url: boards.greenhouse.io/example
 ```
 
-Install the Google package:
+## 14. Set Scoring And Tailoring Rules
 
-```bash
-python -m pip install google-generativeai
-```
+Open `config/scoring_config.yml`.
 
-### Option D: Local LLM With Ollama
-
-Use this if you want to run models on your own computer. This avoids LLM API
-costs, but quality and speed depend on your machine and model.
-
-1. Install Ollama from `https://ollama.com/`.
-2. Open a terminal.
-3. Pull a model:
-
-```bash
-ollama pull llama3.2
-```
-
-4. Test it:
-
-```bash
-ollama run llama3.2
-```
-
-5. Type a short message. If the model responds, Ollama works.
-6. Exit with `Ctrl+D` or close the terminal.
-
-The automation talks to Ollama at:
-
-```text
-http://localhost:11434
-```
-
-In `config/api_config.yml`, set:
+Important fields:
 
 ```yaml
-llm:
-  default_provider: ollama
-  providers:
-    validation: ollama
-    scoring: ollama
-    tailoring: ollama
-    cover_letter: ollama
-    discovery: ollama
-  models:
-    validation: "llama3.2"
-    scoring: "llama3.2"
-    tailoring: "llama3.2"
-    cover_letter: "llama3.2"
-    discovery: "llama3.2"
-
-secrets:
-  anthropic:
-    required: false
+scoring:
+  min_fit_score: 70
+  max_years_experience_required: 5
 ```
 
-Install the OpenAI Python package because Ollama uses an OpenAI-compatible API
-inside this project:
+Use a lower `min_fit_score` for more jobs, or a higher score for stricter
+filtering.
 
-```bash
-python -m pip install openai
-```
+Open `config/tailoring_config.yml` only if you need to change what the AI can
+modify. The default forbidden rules protect against invented experience.
 
-Keep Ollama running whenever you run the automation locally.
+## 15. Add API Keys In GitHub
 
-Important: GitHub-hosted Actions cannot use Ollama running on your laptop. If
-you want scheduled GitHub Actions, use a cloud provider such as Anthropic,
-OpenAI, or Google, or set up your own self-hosted runner.
+Do not paste API keys into files.
 
-### Search Providers For Discovery And Scraping
+### Create `GH_PAT`
 
-The pipeline does not depend on one search API. It tries direct ATS APIs,
-HTTP/BeautifulSoup scraping, Playwright rendering, a temporary SearXNG container
-inside GitHub Actions, and then whichever external APIs you configure.
+`GH_PAT` is required for GitHub Actions to save generated files back into your
+private repository.
 
-SearXNG needs no key. The workflows start it from this repo using
-`.github/searxng/settings.yml` and expose it at:
+1. Open GitHub.
+2. Click your profile picture.
+3. Go to **Settings -> Developer settings -> Personal access tokens**.
+4. Choose **Fine-grained tokens**.
+5. Click **Generate new token**.
+6. Name it `job-hunt-actions`.
+7. Set **Repository access** to only this private repo.
+8. Set **Contents** to **Read and write**.
+9. Generate the token and copy it immediately.
+
+If fine-grained tokens are blocked, use a classic token with the `repo` scope.
+
+### Add Repository Secrets
+
+In your repository, open:
 
 ```text
-http://127.0.0.1:8080
+Settings -> Secrets and variables -> Actions -> Secrets
 ```
 
-If SearXNG cannot start or an upstream search engine throttles it, the pipeline
-continues with the other providers.
+Add:
 
-### Brave Search API, Optional
+- `GH_PAT`
+- one LLM key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`
+- optional search keys: `BRAVE_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`, `RAPIDAPI_KEY`
+- `TEMPLATE_REPO_PAT` for future template updates
 
-Brave Search can be used to discover jobs from web search.
+The upstream job-hunter template is private, so `TEMPLATE_REPO_PAT` is needed if
+you want **Update From Template** to fetch future updates.
 
-1. Go to `https://brave.com/search/api/`.
-2. Create an account.
-3. Choose a plan.
-4. Create or copy your API key.
+Create `TEMPLATE_REPO_PAT` from an account that can access the template repo:
 
-Use this secret name:
+1. Create a fine-grained token.
+2. Select only `Job-Network-Projects/job-hunter-template`.
+3. Set **Contents** to **Read-only**.
+4. Add it to this repo as a secret named `TEMPLATE_REPO_PAT`.
 
-```text
-BRAVE_API_KEY
-```
+If your organization uses SAML/SSO, authorize the token for the organization.
 
-### Tavily, Optional
-
-1. Go to `https://tavily.com/`.
-2. Create a free account.
-3. Copy your API key from the dashboard.
-
-Use this secret name:
-
-```text
-TAVILY_API_KEY
-```
-
-### Exa, Optional
-
-1. Go to `https://exa.ai/`.
-2. Create a free account.
-3. Copy your API key from the dashboard.
-
-Use this secret name:
-
-```text
-EXA_API_KEY
-```
-
-### RapidAPI / JSearch, Optional
-
-JSearch is optional. It can add more job-board results, but the pipeline can run
-without it.
-
-1. Go to `https://rapidapi.com/`.
-2. Create an account.
-3. Subscribe to the JSearch API if you want to use it.
-4. Open your RapidAPI app or project.
-5. Copy the API key.
-
-Use this secret name:
-
-```text
-RAPIDAPI_KEY
-```
-
-## 16. Store API Keys Locally
-
-For local testing, store keys in your terminal session or in your system
-keyring.
-
-### Quick Local Option: Environment Variables
-
-PowerShell on Windows:
-
-```powershell
-$env:ANTHROPIC_API_KEY="paste-your-key-here"
-$env:BRAVE_API_KEY="paste-your-key-here"
-$env:TAVILY_API_KEY="paste-your-key-here"
-$env:EXA_API_KEY="paste-your-key-here"
-```
-
-macOS/Linux:
-
-```bash
-export ANTHROPIC_API_KEY="paste-your-key-here"
-export BRAVE_API_KEY="paste-your-key-here"
-export TAVILY_API_KEY="paste-your-key-here"
-export EXA_API_KEY="paste-your-key-here"
-```
-
-Use `OPENAI_API_KEY` or `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY` if you
-chose OpenAI or Google.
-
-These values last only for the current terminal session.
-
-### Better Local Option: Keyring
-
-With your `.venv` active, run Python:
-
-```bash
-python
-```
-
-Then paste the lines you need:
-
-```python
-import keyring
-keyring.set_password("job-hunt", "ANTHROPIC_API_KEY", "paste-your-key-here")
-keyring.set_password("job-hunt", "BRAVE_API_KEY", "paste-your-key-here")
-keyring.set_password("job-hunt", "TAVILY_API_KEY", "paste-your-key-here")
-keyring.set_password("job-hunt", "EXA_API_KEY", "paste-your-key-here")
-keyring.set_password("job-hunt", "RAPIDAPI_KEY", "paste-your-key-here")
-```
-
-Use `OPENAI_API_KEY` or `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY` if you
-chose OpenAI or Google.
-
-Exit Python:
-
-```python
-exit()
-```
-
-Never commit API keys into files.
-
-## 17. Test Locally First
+## 16. Optional: Test Locally
 
 Run tests:
 
@@ -693,219 +595,106 @@ Run tests:
 python -m pytest -q
 ```
 
-Run one direct job link:
+If local tests are too much, you can continue with GitHub Actions after secrets
+are configured.
+
+## 17. Optional: Run Local Commands
+
+Run one direct job link locally:
 
 ```bash
 PYTHONPATH=scripts python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://example.com/job"
 ```
 
-You need API keys, or Ollama running locally, before real job processing can
-work. If local testing is too much, use GitHub Actions after adding secrets in
-the next step.
+Run the daily hunt locally:
 
-## 17.5 Test LinkedIn Support Locally
+```bash
+PYTHONPATH=scripts python scripts/pipeline/orchestrator.py
+```
 
-Configure `linkedin/config.yml` first. Your story bank is treated as
-confidential input, so generated ideas and drafts must stay generalized and
-public-safe.
-
-Generate raw ideas:
+Optional LinkedIn support:
 
 ```bash
 PYTHONPATH=scripts python scripts/linkedin/generate_ideas.py
-```
-
-Create draft posts from unused raw ideas:
-
-```bash
 PYTHONPATH=scripts python scripts/linkedin/draft_posts.py
-```
-
-Discover public LinkedIn people/posts for manual review:
-
-```bash
 PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
 ```
 
-Nothing here posts, comments, follows, connects, messages, or likes on
-LinkedIn. Review every output before using it.
+LinkedIn support never posts, comments, follows, connects, messages, or likes.
+Review every output manually.
 
-## 18. Add API Keys In GitHub
+## 18. Set Up Faster GitHub Actions With The Runner Image
 
-Do not paste API keys into files.
+The workflows can use a prebuilt GHCR image with Python dependencies,
+Playwright Chromium, and LaTeX already installed. This makes runs faster.
 
-`GH_PAT` is required if you want GitHub Actions to run this automation and save
-generated files back into your repository. Without it, the workflow may run but
-will fail when it tries to push `jobs/`, `README.md`, or updated config files.
-
-### Create `GH_PAT`
-
-1. Open GitHub.
-2. Click your profile picture in the top-right corner.
-3. Go to **Settings**.
-4. Go to **Developer settings**.
-5. Go to **Personal access tokens**.
-6. Choose **Fine-grained tokens**.
-7. Click **Generate new token**.
-8. Use a clear name, for example:
+If your organization provides a shared image, add a repository variable:
 
 ```text
-job-hunt-actions
+Settings -> Secrets and variables -> Actions -> Variables
+JOB_HUNT_RUNNER_IMAGE = ghcr.io/job-network-projects/job-hunt-runner:latest
 ```
 
-9. Set an expiration date you are comfortable maintaining.
-10. For **Resource owner**, select your GitHub user or organization.
-11. For **Repository access**, choose **Only select repositories**.
-12. Select the private repo you created from this template.
-13. Under **Repository permissions**, set:
+If your organization does not provide a shared image, build your own image:
 
-```text
-Contents: Read and write
+1. Open **Actions -> Build Runner Image**.
+2. Click **Run workflow**.
+3. Wait for it to finish.
+
+If publishing fails, open **Settings -> Actions -> General**, set workflow
+permissions to **Read and write permissions**, save, and re-run the image build.
+
+Do this before the first real workflow run. If the image is missing, workflows
+can still use a slower fallback, but the recommended GitHub Actions setup is to
+use the runner image.
+
+## 19. Preflight Checklist Before Running A Workflow
+
+Do not run workflows until these are done:
+
+- `story_bank.md` has real final STAR stories, not only examples.
+- `config/api_config.yml` points to the resume file you actually edited.
+- The active resume `.tex` has your real base resume content.
+- `config/cover_letter_config.yml` has your real background and name.
+- `config/search_config.yml` has your target regions, titles, exclusions, and companies.
+- `config/scoring_config.yml` has a score threshold you are comfortable with.
+- GitHub Secrets include `GH_PAT` and the LLM API key for your configured provider.
+
+Commit and push your setup:
+
+```bash
+git status
+git add .
+git commit -m "complete initial job hunt setup"
+git push origin main
 ```
 
-14. Click **Generate token**.
-15. Copy the token immediately. GitHub will not show it again.
+## 20. Run The Automation In GitHub
 
-If your organization blocks fine-grained tokens, create a classic token instead
-and give it the `repo` scope.
-
-For this template's workflows, `GH_PAT` only needs to check out your repo and
-push normal generated files back to the same repo. That is why
-`Contents: Read and write` is enough.
-
-`GH_PAT` does not need workflow permission unless you later change the workflows
-so they push edits to files under `.github/workflows/` or call the GitHub API to
-start other workflow runs.
-
-In your GitHub repository:
-
-1. Go to **Settings**.
-2. Go to **Secrets and variables**.
-3. Click **Actions**.
-4. Click **New repository secret**.
-
-Add the secrets you use:
-
-- `ANTHROPIC_API_KEY`: required if using Anthropic.
-- `OPENAI_API_KEY`: required if using OpenAI.
-- `GOOGLE_API_KEY`: required if using Google Gemini.
-- `BRAVE_API_KEY`: optional search fallback.
-- `TAVILY_API_KEY`: optional search fallback.
-- `EXA_API_KEY`: optional search fallback.
-- `RAPIDAPI_KEY`: optional, only if using JSearch.
-- `GH_PAT`: required for GitHub Actions to commit generated files back to your repository.
-- `TEMPLATE_REPO_PAT`: required only if the upstream template repo is private.
-
-If you use Ollama locally, you do not need an LLM API key for local runs. For
-GitHub-hosted Actions, use a cloud LLM provider instead.
-
-The secret names must match `config/api_config.yml`.
-
-### Create `TEMPLATE_REPO_PAT` For Private Template Updates
-
-Skip this section if `Job-Network-Projects/job-hunter-template` is public.
-
-If the template repo is private, the **Update From Template** workflow needs its
-own token to read it. Being added to the GitHub organization lets you open the
-repo in your browser, but the workflow runs as GitHub Actions inside your own
-repo. The built-in `GITHUB_TOKEN` can read your repo, but it cannot
-automatically read another private repo.
-
-Create a fine-grained personal access token from an account that can access the
-template repo:
-
-1. Open GitHub.
-2. Click your profile picture in the top-right corner.
-3. Go to **Settings**.
-4. Go to **Developer settings**.
-5. Go to **Personal access tokens**.
-6. Choose **Fine-grained tokens**.
-7. Click **Generate new token**.
-8. Use a clear name, for example:
-
-```text
-job-hunt-template-read
-```
-
-9. For **Resource owner**, select the owner of the template repo.
-10. For **Repository access**, choose **Only select repositories**.
-11. Select `Job-Network-Projects/job-hunter-template`.
-12. Under **Repository permissions**, set:
-
-```text
-Contents: Read-only
-```
-
-13. Generate the token and copy it immediately.
-14. In your repository, go to **Settings -> Secrets and variables -> Actions**.
-15. Add a repository secret named:
-
-```text
-TEMPLATE_REPO_PAT
-```
-
-16. Paste the token value.
-
-If the organization uses SAML/SSO or has token restrictions, authorize the token
-for the organization after creating it. If fine-grained tokens are blocked,
-create a classic token with the `repo` scope instead.
-
-## 19. Run The Automation In GitHub
+For specific job links:
 
 1. Open your repository on GitHub.
 2. Click **Actions**.
-3. Select **Tailor Links** if you want to process specific job links.
+3. Select **Tailor Links**.
 4. Click **Run workflow**.
-5. Paste one job URL into `url_1`.
+5. Paste one or more job URLs.
 6. Click **Run workflow**.
 
-When the run finishes, check the `jobs/` folder in your repository.
-
-The folder starts empty except for `.gitkeep`; each successful run adds one
-subfolder per processed job.
-
-For scheduled daily search, use the **Job Hunt Pipeline** workflow. Scheduled
-hunt runs are staggered by enabled region:
-
-- 06:00 Europe/Berlin time runs the first enabled region in
-  `config/search_config.yml`.
-- 07:00 Europe/Berlin time runs the second enabled region.
-- Later hourly slots continue for the remaining enabled regions.
-- Empty slots exit before installing dependencies or running the pipeline if
-  you have fewer enabled regions than cron entries.
-
-For example, if only `berlin` is enabled, only the 06:00 Berlin slot runs the
-pipeline. All later scheduled slots stop after resolving that there is no
-region for the slot.
-
-To run a hunt manually:
+For search:
 
 1. Open **Actions -> Job Hunt Pipeline**.
 2. Click **Run workflow**.
 3. Set `job` to `hunt`.
-4. Set `region` to `all` for every enabled region, or enter one region key such
-   as `berlin`.
+4. Set `region` to `all` or enter one region key such as `primary`.
 5. Click **Run workflow**.
 
-Run it manually once before relying on the schedule.
+Scheduled hunts run enabled regions one hour apart starting at 06:00
+Europe/Berlin time on weekdays. Run the workflow manually once before relying on
+the schedule.
 
-## 19.5 Run LinkedIn Content In GitHub
+## 21. Review The Output
 
-Open **Actions -> LinkedIn Content**. You can run:
-
-- `generate-ideas`: adds public-safe raw ideas to `linkedin/ideas.md`.
-- `draft-posts`: creates review drafts under `linkedin/drafts/`.
-- `discover-engagement`: searches public LinkedIn results and updates
-  `linkedin/networking.md` and `linkedin/engagement.md`.
-- `all`: runs all three jobs manually.
-
-The scheduled workflow runs idea generation weekly, draft generation weekly,
-and engagement discovery three times per week. It commits only files under
-`linkedin/`. It never performs LinkedIn write actions.
-
-## 20. Review The Output
-
-Each processed job creates a folder like:
+Each processed job creates:
 
 ```text
 jobs/YYYY-MM-DD_company_role/
@@ -913,273 +702,91 @@ jobs/YYYY-MM-DD_company_role/
 
 Inside you may see:
 
-- `jd.md`: the job description.
-- `resume_tailored.tex`: tailored resume source.
-- `resume_tailored.pdf`: tailored resume PDF, if PDF compilation succeeded.
-- `cover_letter.md`: generated cover letter.
-- `cover_letter.pdf`: generated cover letter PDF, if generated.
-- `meta.json`: score and matching details.
+- `jd.md`
+- `resume_tailored.tex`
+- `resume_tailored.pdf`
+- `cover_letter.md`
+- `cover_letter.pdf`
+- `meta.json`
 
-Always review the resume and cover letter before applying.
+Always review the tailored resume and cover letter before applying.
 
 Each hunt run tailors at most 15 matched jobs. If more than 15 jobs pass the
 score threshold, the pipeline processes the 15 highest-scoring matches first.
 
-## 21. Faster GitHub Actions With The Runner Image
-
-The hunt and tailor-links workflows use a prebuilt GHCR Docker image named
-`job-hunt-runner`. It contains Python, the Python dependencies, Playwright
-Chromium, and LaTeX. This avoids reinstalling LaTeX during every run.
-
-By default, the workflows look for:
-
-```text
-ghcr.io/<your-github-owner>/job-hunt-runner:latest
-```
-
-If your organization provides a shared public image, set a repository variable
-named `JOB_HUNT_RUNNER_IMAGE` to that full image name, for example:
-
-```text
-ghcr.io/job-network-projects/job-hunt-runner:latest
-```
-
-### A. Build The Image Once
-
-After setup, build the image once:
-
-1. Open your repository on GitHub.
-2. Go to **Actions**.
-3. Open **Build Runner Image**.
-4. Click **Run workflow**.
-5. Wait for the workflow to finish.
-
-The image is also rebuilt automatically when `Dockerfile`, `.dockerignore`,
-`requirements.txt`, or the build workflow changes.
-
-If you are using a shared public image through `JOB_HUNT_RUNNER_IMAGE`, you do
-not need to build your own image unless you changed `Dockerfile` or
-`requirements.txt`.
-
-### B. If The Image Is Missing
-
-The daily hunt and tailor-links workflows will still run. They fall back to the
-native install path, which is slower because LaTeX is installed during the job.
-
-If you see a warning that the prebuilt runner image is unavailable:
-
-1. Run **Actions -> Build Runner Image**.
-2. Wait for it to complete.
-3. Re-run **Job Hunt Pipeline** or **Tailor Links**.
-
-### C. GitHub Packages Permission
-
-The workflow publishes the image to GitHub Container Registry using the built-in
-`GITHUB_TOKEN`. If image publishing fails, check:
-
-1. Open your repository on GitHub.
-2. Go to **Settings -> Actions -> General**.
-3. Under **Workflow permissions**, choose **Read and write permissions**.
-4. Save.
-5. Re-run **Build Runner Image**.
-
-The image is large because LaTeX font packages are large. If many users are in
-one organization, prefer one shared public image instead of each user building a
-private copy.
-
 ## 22. Getting Future Template Updates
 
-Updates from the original template are not automatic in repositories created
-with **Use this template**. This is intentional: your resume, story bank, jobs,
-and configs are personal, so updates should arrive through a pull request that
-you can review.
-
-### A. Recommended: Use The Update Workflow
-
-Use this when you want the latest code, workflows, dependencies, and docs without
-typing Git commands.
+Use **Actions -> Update From Template** when you want the latest maintained
+code, workflows, dependencies, and docs.
 
 1. Open your repository on GitHub.
-2. Go to **Actions**.
-3. Open **Update From Template**.
-4. Click **Run workflow**.
-5. Keep `upstream_repo` as `Job-Network-Projects/job-hunter-template`.
-6. Keep `upstream_branch` as `main`.
-7. Leave `update_config` turned off unless you want template config files to
-   overwrite your current config files.
-8. Leave `update_linkedin` turned off unless you want the starter LinkedIn
-   workspace copied over or refreshed.
-9. Click **Run workflow**.
-10. Wait for the workflow to open a pull request.
-11. Review the changed files and merge the pull request when ready.
-12. Pull the merged changes to your laptop:
+2. Go to **Actions -> Update From Template**.
+3. Click **Run workflow**.
+4. Keep `upstream_repo` as `Job-Network-Projects/job-hunter-template`.
+5. Keep `upstream_branch` as `main`.
+6. Leave `update_config` off unless you intentionally want template config files.
+7. Leave `update_linkedin` off unless you intentionally want the starter LinkedIn workspace.
+8. Wait for the workflow to open a pull request.
+9. Review and merge the pull request.
+10. Pull the merged changes locally:
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-If your local branch is named `master`, use:
+If the workflow cannot read the private template repo, confirm this repo has a
+`TEMPLATE_REPO_PAT` secret with read access to
+`Job-Network-Projects/job-hunter-template`.
 
-```bash
-git checkout master
-git pull origin master
-```
+The update workflow preserves resumes, story bank, project instructions,
+generated jobs, config files, and LinkedIn workspace files by default.
 
-By default, the workflow preserves:
+The pull request uses semantic versioning from the template repo:
 
-- resumes
-- story bank
-- project instructions
-- generated jobs
-- config files
-- LinkedIn workspace files
+- `PATCH`: fixes, cleanup, or documentation updates.
+- `MINOR`: backward-compatible new features.
+- `MAJOR`: breaking setup, workflow, or config changes.
 
-If a release adds new config fields, read the pull request description and this
-`SETUP.md`, then copy only the new fields you need into your own config files.
-
-If the workflow fails with:
-
-```text
-remote: Repository not found.
-fatal: repository 'https://github.com/Job-Network-Projects/job-hunter-template.git/' not found
-```
-
-the upstream template repo is private and the workflow cannot read it. Add the
-`TEMPLATE_REPO_PAT` secret described in section 18, then run **Update From
-Template** again.
-
-### B. If You Have Local Uncommitted Changes
-
-Before pulling updates locally, check whether you have unsaved local changes:
-
-```bash
-git status
-```
-
-If Git says `nothing to commit, working tree clean`, you can pull normally:
-
-```bash
-git pull origin main
-```
-
-If Git shows changed files, save them first:
-
-```bash
-git add .
-git commit -m "save my local changes"
-git pull origin main
-```
-
-If Git says the branch has no upstream tracking branch, run:
-
-```bash
-git branch --set-upstream-to=origin/main main
-git pull
-```
-
-### C. Manual Git Fallback
-
-Use this only if the update workflow is unavailable or you prefer working from
-your terminal.
-
-Do this once:
-
-```bash
-git remote add upstream https://github.com/Job-Network-Projects/job-hunter-template.git
-git remote -v
-```
-
-If Git says `remote upstream already exists`, continue.
-
-Save your work:
-
-```bash
-git status
-git add .
-git commit -m "save my local changes"
-```
-
-If Git says `nothing to commit`, continue.
-
-Create a backup branch:
-
-```bash
-git branch
-git checkout -b backup-before-template-update
-git checkout main
-```
-
-Use `master` instead of `main` if your repo uses `master`.
-
-Fetch and merge updates:
-
-```bash
-git fetch upstream
-git branch -r
-git checkout main
-git merge upstream/main
-```
-
-If Git says histories are unrelated, run:
-
-```bash
-git merge --allow-unrelated-histories upstream/main
-```
-
-Push after a successful merge:
-
-```bash
-git push origin main
-```
-
-Conflicts are normal if both you and the template changed the same file. In
-VS Code, open **Source Control**, click each conflicted file, choose the version
-you want to keep, save the file, then run:
-
-```bash
-git add .
-git commit -m "merge template updates"
-git push origin main
-```
-
-If the merge feels wrong before committing:
-
-```bash
-git merge --abort
-```
-
-## 23. Automatically Delete Merged PR Branches
-
-If you use pull requests in your own repo, GitHub can delete the PR branch after
-the PR is merged.
-
-1. Open your repo on GitHub.
-2. Go to **Settings -> General**.
-3. Scroll to **Pull Requests**.
-4. Turn on **Automatically delete head branches**.
-
-This only deletes the temporary branch after a PR is merged. It does not delete
-your `main` branch, your files, or branches from someone else's fork.
+For a `MAJOR` update, read the changelog and review setup/config changes before
+merging.
 
 ## Common Problems
 
 **No jobs found**
 
-Check `config/search_config.yml`. The company URLs or job titles may be too
-narrow.
+Check `config/search_config.yml`. Make sure the region is enabled, job titles
+match your target roles, company career URLs are valid, and exclusions are not
+too broad.
 
-**Secret not found**
+**Workflow says a secret is missing**
 
-Check that the secret exists under GitHub repository **Settings -> Secrets and
-variables -> Actions** and that the name exactly matches `config/api_config.yml`.
+Check **Settings -> Secrets and variables -> Actions**. Secret names must match
+`config/api_config.yml` exactly.
+
+**The LLM provider fails**
+
+Check `config/api_config.yml`. The provider name, role providers, model names,
+and required secret must match. If you changed providers, make sure every role
+uses the new provider or intentionally mixes providers.
 
 **PDF was not generated**
 
-The `.tex` file is still saved. Check the workflow logs for the LaTeX error.
-You can also edit the `.tex` file manually.
+The `.tex` file is still saved. Open the workflow logs and search for the LaTeX
+error. Common causes are unescaped `&`, `%`, `$`, `_`, or a missing brace.
 
-**Cover letter sounds too generic**
+**Story bank format got messy**
 
-Add better, more specific stories to `story_bank.md` and improve
+Restore the standard headings from this guide, then ask an AI helper to preserve
+the exact `story_bank.md` format while moving content back under Draft, Final,
+and Allocation Log.
+
+**Cover letter sounds generic**
+
+Add stronger, more specific final STAR stories and improve
 `candidate_background` in `config/cover_letter_config.yml`.
+
+**Git push fails**
+
+Sign in to GitHub through VS Code, or use a GitHub personal access token when
+the terminal asks for a password.
