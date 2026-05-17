@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.7.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `74ff7ec` docs: explain private template update access
+
+
 ## 2.6.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
