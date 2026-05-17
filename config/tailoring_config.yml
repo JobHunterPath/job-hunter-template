@@ -4,6 +4,7 @@ tailoring:
       - "summary_section_text"
       - "bullet_ordering_within_roles"
       - "keyword_synonyms_to_match_jd"
+      - "active_project_section_selection_and_bullets"
     forbidden_modifications:
       - "inventing_new_metrics"
       - "inventing_new_skills"
@@ -19,6 +20,26 @@ tailoring:
       max_per_role: 5
       max_lines_per_bullet: 2
       required_verb_tense: "past"
+    projects:
+      enabled_when_section_active: true
+      never_uncomment_project_section: true
+      never_add_projects_to_fill_space: true
+      max_projects: 4
+      min_bullets_per_project: 3
+      max_bullets_per_project: 5
+      max_lines_per_bullet: 2
+      max_total_resume_pages: 2
+      remove_least_relevant_if_overflow_risk: true
+      allowed_story_id_prefixes:
+        - "TECH"
+        - "UNI"
+        - "SIDE"
+        - "THESIS"
+      selection_criteria:
+        - "direct_relevance_to_job_description"
+        - "PM_or_PO_relevance"
+        - "technical_depth_relevant_to_role"
+        - "verified_story_bank_source"
     preserve_latex: true
     preserve_formatting: true
     preserve_commands: true
@@ -37,5 +58,6 @@ tailoring:
 
   stories:
     story_bank: "story_bank.md"
+    max_chars_for_tailoring: 16000
     gap_coverage: "medium"
     strict_no_fabrication: true

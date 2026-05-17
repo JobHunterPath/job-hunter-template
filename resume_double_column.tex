@@ -206,16 +206,19 @@ Summary Text
 \end{paracol}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PROJECTS (commented out - uncomment when tailoring to a specific JD)
+% OPTIONAL SINGLE-COLUMN SECOND PAGE
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
-% To activate: move \end{paracol} below this block and remove the % from
-% each line. Best used in the main (left) column before \switchcolumn, or
-% as a standalone section after \end{paracol} if it's short.
+% The first page keeps the one-column Summary followed by the two-column
+% paracol layout above. Uncomment this block when you want page 2 to switch
+% back to a full-width, single-column section for side projects, technical
+% projects, publications, selected coursework, or patents.
+%
+% \clearpage
 %
 % \cvsection{Projects}
 %
-% \cvevent{Project Name}{Tech Stack / Role}{Date Range}{Optional location}
+% \cvevent{Project Name}{}{Date Range}{}
 % \begin{itemize}
 %   \item Outcome-first bullet describing what you shipped and its impact.
 %   \item Second bullet with a concrete metric or scope anchor.
@@ -224,10 +227,11 @@ Summary Text
 %
 % \divider
 %
-% \cvevent{Another Project}{Tech Stack / Role}{Date Range}{}
+% \cvevent{\href{https://github.com/username/repo}{Linked Project Name}}{Tech Stack / Role}{Date Range}{}
 % \begin{itemize}
+%   \item Use a subheading only when it adds useful context, such as a public repo,
+%   role, or tech stack that should be visible at scan speed.
 %   \item Outcome-first bullet.
-%   \item Scope or metric bullet.
 % \end{itemize}
 
 \end{document}

@@ -24,6 +24,18 @@ Useful prefix patterns:
 - Education projects: `UNI-01`, `THESIS-01`
 - Side projects: `SIDE-01`, `PORTFOLIO-01`
 
+Project-tailoring prefixes:
+
+- Use stable prefixes such as `TECH`, `UNI`, `SIDE`, and `THESIS` for technical,
+  university, side, thesis, or portfolio projects that may be selected for a
+  resume Projects section.
+- The automated tailorer only uses project stories when an uncommented Projects
+  section already exists in the resume. Commented-out project sections stay
+  inactive and should not be filled in automatically.
+- Keep each project story factual and compact enough to produce 3-5 resume
+  bullets. The resume Projects section should not exceed 4 projects or push the
+  resume beyond its intended page limit.
+
 Rules:
 
 - IDs should never be reused.

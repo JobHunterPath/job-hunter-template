@@ -72,3 +72,58 @@ def test_tailor_passes_keywords_and_gaps_in_prompt():
 
     assert 'agile' in captured['user']
     assert 'automotive' in captured['user']
+
+
+def test_tailor_includes_project_rules_and_story_bank_for_active_projects():
+    captured = {}
+
+    def capture_complete(**kwargs):
+        captured['user'] = kwargs.get('user', '')
+        return SAMPLE_LATEX
+
+    tex_with_projects = r"""\documentclass{altacv}
+\begin{document}
+\cvsection{Technical Projects}
+\cvevent{Project}{Course}{2026}{}
+\begin{itemize}
+\item Existing project bullet
+\end{itemize}
+\end{document}"""
+
+    mock = MagicMock()
+    mock.complete.side_effect = capture_complete
+
+    with patch.object(tailorer, 'BASE_TEX', tex_with_projects), \
+         patch.object(tailorer, '_load_story_bank', return_value='### MS-01 — Digital Factory story'), \
+         patch('pipeline.tailorer.get_llm_client', return_value=mock):
+        tailorer.tailor(MATCH)
+
+    assert 'Include at most 4 projects total' in captured['user']
+    assert 'Never exceed 5 bullets' in captured['user']
+    assert 'Do not create a third page' in captured['user']
+    assert 'MS-01' in captured['user']
+
+
+def test_tailor_disables_project_tailoring_when_section_is_commented():
+    captured = {}
+
+    def capture_complete(**kwargs):
+        captured['user'] = kwargs.get('user', '')
+        return SAMPLE_LATEX
+
+    tex_with_commented_projects = r"""\documentclass{altacv}
+\begin{document}
+% \cvsection{Projects}
+% \cvevent{Project}{Course}{2026}{}
+\end{document}"""
+
+    mock = MagicMock()
+    mock.complete.side_effect = capture_complete
+
+    with patch.object(tailorer, 'BASE_TEX', tex_with_commented_projects), \
+         patch.object(tailorer, '_load_story_bank', return_value='### MS-01 — Digital Factory story'), \
+         patch('pipeline.tailorer.get_llm_client', return_value=mock):
+        tailorer.tailor(MATCH)
+
+    assert 'No active Projects/Technical Projects section exists' in captured['user']
+    assert 'Do not add, uncomment, or tailor project content' in captured['user']

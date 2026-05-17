@@ -41,7 +41,8 @@ installing LaTeX on every job run.
    - `search_config.yml`
    - `scoring_config.yml`
    - `cover_letter_config.yml`
-   - `tailoring_config.yml`
+   - `tailoring_config.yml` (controls what the AI can change, including project
+     content selection when an uncommented Projects section exists in your resume)
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. Store API keys in environment variables, GitHub Actions secrets, or keyring.
 7. Run tests, then run the pipeline locally or through GitHub Actions.
@@ -54,6 +55,13 @@ later, and so on. Extra cron slots exit before the pipeline starts, so a repo
 with one enabled region only runs the first slot. Manual **Job Hunt Pipeline**
 runs include a `region` field where you can enter `all` or a specific region
 key from `config/search_config.yml`.
+
+**Project section tailoring:** When your resume contains an uncommented
+Projects section, the tailorer selects and adjusts project content from your
+story bank to match each job description. It will never uncomment a
+commented-out section or add a new one. Configure the allowed story ID prefixes,
+project count, bullet count, and page limit in
+`config/tailoring_config.yml` under `tailoring.rules.projects`.
 
 ## Search Fallbacks
 
