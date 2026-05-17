@@ -65,7 +65,6 @@ linkedin:
     drafts_dir: "linkedin/drafts"
     engagement: "linkedin/engagement.md"
     networking: "linkedin/networking.md"
-    published: "linkedin/published.md"
 
   cadence:
     idea_generation_per_week: 1

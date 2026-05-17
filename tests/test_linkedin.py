@@ -25,7 +25,6 @@ def _config(tmp_path: Path) -> Path:
                 "drafts_dir": str(tmp_path / "drafts"),
                 "engagement": str(tmp_path / "engagement.md"),
                 "networking": str(tmp_path / "networking.md"),
-                "published": str(tmp_path / "published.md"),
             },
             "idea_generation": {"ideas_per_run": 2},
             "draft_generation": {
@@ -219,6 +218,21 @@ def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
     assert person["suggested_action"] == "review manually"
     assert person["relationship_type"] == "peer_conversation"
     assert person["message_variants"]
-    assert post["suggested_comment"]
+    assert not post["suggested_comment"]
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
-    assert "Useful framing" in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+    assert post["url"] in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+
+
+def test_stale_posts_are_filtered():
+    from datetime import date, timedelta
+    from linkedin.discover_engagement import _is_recent_post
+
+    old = date.today() - timedelta(days=35)
+    recent = date.today() - timedelta(days=10)
+
+    old_desc = f"{old.strftime('%b')} {old.day}, {old.year} · Some post content"
+    recent_desc = f"{recent.strftime('%b')} {recent.day}, {recent.year} · Some post content"
+
+    assert not _is_recent_post(old_desc)
+    assert _is_recent_post(recent_desc)
+    assert _is_recent_post("No date prefix — keep by default")

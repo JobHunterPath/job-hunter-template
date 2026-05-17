@@ -13,7 +13,7 @@ It only creates private review queues and draft text.
 3. Run draft generation once a week to create posts from unused raw ideas.
 4. Run discovery two or three times per week to find people, posts, and
    networking message drafts for manual review.
-5. Publish manually on LinkedIn and log results in `published.md`.
+5. Publish manually on LinkedIn.
 
 ## Local Commands
 
