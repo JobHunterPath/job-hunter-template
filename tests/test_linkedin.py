@@ -185,7 +185,7 @@ def test_discover_engagement_writes_review_queues(tmp_path):
 
     assert len(result["people"]) == 1
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
-    assert "Suggested comment" in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+    assert "Draft comment" in (tmp_path / "engagement.md").read_text(encoding="utf-8")
 
 
 def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
@@ -221,6 +221,23 @@ def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
     assert not post["suggested_comment"]
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
     assert post["url"] in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+
+
+def test_login_wall_results_are_filtered(tmp_path):
+    cfg = _config(tmp_path)
+    search_result = [
+        {
+            "url": "https://www.linkedin.com/posts/login-wall-post",
+            "title": "Some Post - LinkedIn",
+            "description": "Agree & Join LinkedIn\nBy clicking Continue to join...",
+            "source": "SearXNG",
+            "query": 'site:linkedin.com/posts "platform product management"',
+        },
+    ]
+    with patch("linkedin.discover_engagement.search_web", return_value=search_result), \
+         patch("linkedin.discover_engagement.complete_linkedin", return_value='{}'):
+        result = discover_engagement.discover(cfg)
+    assert len(result["posts"]) == 0
 
 
 def test_stale_posts_are_filtered():
