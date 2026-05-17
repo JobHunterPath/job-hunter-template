@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.4 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `56b90a9` docs: add setup commit step
+
+
 ## 2.8.3 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.

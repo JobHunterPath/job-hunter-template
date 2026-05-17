@@ -31,7 +31,7 @@ your resume, story bank, generated jobs, and config files untouched by default.
 The pull request shows whether the template update is a patch, minor, or major
 version change.
 After merging that pull request, run `git pull origin main` locally. Detailed
-step-by-step update instructions are in [SETUP.md](SETUP.md#23-getting-future-template-updates).
+step-by-step update instructions are in [SETUP.md](SETUP.md#24-getting-future-template-updates).
 
 The GitHub workflows use a prebuilt GHCR runner image with Python, Playwright,
 and LaTeX already installed. The image is rebuilt automatically when
@@ -55,7 +55,7 @@ installing LaTeX on every job run.
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
 6. If you change LLM provider, replace the `llm.models` values with valid model names from that provider.
 7. Create and store API keys using the step-by-step instructions in `SETUP.md`.
-8. Run the preflight checklist in [SETUP.md](SETUP.md#20-preflight-checklist-before-running-a-workflow), then run the pipeline through GitHub Actions.
+8. Run the preflight checklist, commit, and push before starting GitHub Actions.
 9. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
 
 Scheduled GitHub hunts run enabled regions one hour apart, starting at

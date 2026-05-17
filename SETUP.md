@@ -824,7 +824,48 @@ PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
 LinkedIn support never posts, comments, follows, connects, messages, or likes.
 Review every output manually.
 
-## 19. Set Up Faster GitHub Actions With The Runner Image
+## 19. Preflight Checklist Before Committing
+
+Do not commit or run workflows until these are done:
+
+- `project_instructions.md` has your factual profile, target roles, and rules.
+- `story_bank.md` has real final STAR stories, not only examples.
+- `config/api_config.yml` points to the resume file you actually edited.
+- The active resume `.tex` has your real base resume content.
+- `config/cover_letter_config.yml` has your real background and name.
+- `config/search_config.yml` has your target regions, titles, exclusions, and companies.
+- `config/scoring_config.yml` has a score threshold you are comfortable with.
+- GitHub Secrets include `GH_PAT` and the LLM API key for your configured provider.
+
+## 20. Commit And Push Your Setup
+
+GitHub Actions only sees files that have been pushed to GitHub. If you edited
+files only on your laptop and did not push them, the workflows will run with old
+files.
+
+In the VS Code terminal, run:
+
+```bash
+git status
+git add .
+git commit -m "complete initial job hunt setup"
+git push origin main
+```
+
+If Git says `nothing to commit`, that is okay. Continue to the next step.
+
+If Git asks who you are, run the Git setup commands again with your own name and
+email:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
+If `git push` fails because GitHub asks for a password, sign in through VS Code
+or use a GitHub personal access token.
+
+## 21. Set Up Faster GitHub Actions With The Runner Image
 
 The workflows can use a prebuilt GHCR image with Python dependencies,
 Playwright Chromium, and LaTeX already installed. This makes runs faster.
@@ -849,29 +890,10 @@ Do this before the first real workflow run. If the image is missing, workflows
 can still use a slower fallback, but the recommended GitHub Actions setup is to
 use the runner image.
 
-## 20. Preflight Checklist Before Running A Workflow
+## 22. Run The Automation In GitHub
 
-Do not run workflows until these are done:
-
-- `project_instructions.md` has your factual profile, target roles, and rules.
-- `story_bank.md` has real final STAR stories, not only examples.
-- `config/api_config.yml` points to the resume file you actually edited.
-- The active resume `.tex` has your real base resume content.
-- `config/cover_letter_config.yml` has your real background and name.
-- `config/search_config.yml` has your target regions, titles, exclusions, and companies.
-- `config/scoring_config.yml` has a score threshold you are comfortable with.
-- GitHub Secrets include `GH_PAT` and the LLM API key for your configured provider.
-
-Commit and push your setup:
-
-```bash
-git status
-git add .
-git commit -m "complete initial job hunt setup"
-git push origin main
-```
-
-## 21. Run The Automation In GitHub
+Open the **Actions** tab in your GitHub repository. If GitHub shows a button to
+enable workflows for this repository, click it.
 
 For specific job links:
 
@@ -894,7 +916,7 @@ Scheduled hunts run enabled regions one hour apart starting at 06:00
 Europe/Berlin time on weekdays. Run the workflow manually once before relying on
 the schedule.
 
-## 22. Review The Output
+## 23. Review The Output
 
 Each processed job creates:
 
@@ -916,7 +938,7 @@ Always review the tailored resume and cover letter before applying.
 Each hunt run tailors at most 15 matched jobs. If more than 15 jobs pass the
 score threshold, the pipeline processes the 15 highest-scoring matches first.
 
-## 23. Getting Future Template Updates
+## 24. Getting Future Template Updates
 
 Use **Actions -> Update From Template** when you want the latest maintained
 code, workflows, dependencies, and docs.
@@ -1002,6 +1024,11 @@ too broad.
 
 Check **Settings -> Secrets and variables -> Actions**. Secret names must match
 `config/api_config.yml` exactly.
+
+**Actions tab says workflows are disabled**
+
+Click the button to enable workflows for this repository, then refresh the
+Actions page.
 
 **The LLM provider fails**
 
