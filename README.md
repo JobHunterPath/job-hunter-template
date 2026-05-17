@@ -33,10 +33,11 @@ version change.
 After merging that pull request, run `git pull origin main` locally. Detailed
 step-by-step update instructions are in [SETUP.md](SETUP.md#24-getting-future-template-updates).
 
-The GitHub workflows use a prebuilt GHCR runner image with Python, Playwright,
-and LaTeX already installed. The image is rebuilt automatically when
+The GitHub workflows use your repo's own GHCR runner image with Python,
+Playwright, and LaTeX already installed. The image is rebuilt automatically when
 `Dockerfile` or `requirements.txt` changes, which avoids spending 10-20 minutes
-installing LaTeX on every job run.
+installing LaTeX on every job run. New repos build this repo-scoped image:
+`ghcr.io/<owner>/<repo>/job-hunt-runner:latest`.
 
 ## Quick Start
 

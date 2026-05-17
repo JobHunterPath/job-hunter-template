@@ -27,8 +27,8 @@ jobs:
         id: image
         shell: bash
         run: |
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "name=ghcr.io/${owner}/job-hunt-runner" >> "$GITHUB_OUTPUT"
+          repo="${GITHUB_REPOSITORY,,}"
+          echo "name=ghcr.io/${repo}/job-hunt-runner" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -48,3 +48,6 @@ jobs:
           tags: |
             ${{ steps.image.outputs.name }}:latest
             ${{ steps.image.outputs.name }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Job hunt runner image for ${{ github.repository }}

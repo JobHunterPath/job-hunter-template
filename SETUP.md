@@ -867,24 +867,41 @@ or use a GitHub personal access token.
 
 ## 21. Set Up Faster GitHub Actions With The Runner Image
 
-The workflows can use a prebuilt GHCR image with Python dependencies,
-Playwright Chromium, and LaTeX already installed. This makes runs faster.
+Your repository should build and publish its own GHCR runner image. The image
+contains Python dependencies, Playwright Chromium, and LaTeX already installed,
+so workflow runs are faster after the first build.
 
-If your organization provides a shared image, add a repository variable:
-
-```text
-Settings -> Secrets and variables -> Actions -> Variables
-JOB_HUNT_RUNNER_IMAGE = ghcr.io/job-network-projects/job-hunt-runner:latest
-```
-
-If your organization does not provide a shared image, build your own image:
+Build your repo's image:
 
 1. Open **Actions -> Build Runner Image**.
 2. Click **Run workflow**.
 3. Wait for it to finish.
 
+Your repo publishes this repo-scoped image:
+
+```text
+ghcr.io/<your-github-owner>/<your-repository>/job-hunt-runner:latest
+```
+
+Every person who creates a repo from the template publishes their own package
+under their own repo. This avoids permission conflicts with another package
+named `job-hunt-runner` under the same GitHub account.
+
 If publishing fails, open **Settings -> Actions -> General**, set workflow
 permissions to **Read and write permissions**, save, and re-run the image build.
+
+If publishing fails with `403 Forbidden` while pushing to `ghcr.io`, check these
+in order:
+
+1. Confirm **Settings -> Actions -> General -> Workflow permissions** is set to
+   **Read and write permissions**.
+2. Pull the latest template update so the image name is repo-scoped as shown
+   above, then rerun **Build Runner Image**.
+3. If a package already exists under **GitHub profile -> Packages** or
+   **Repository -> Packages**, open the package settings and give this repository
+   **Write** access under **Manage Actions access**.
+4. If the old package is not needed, delete the old `job-hunt-runner` package
+   and rerun the workflow.
 
 Do this before the first real workflow run. If the image is missing, workflows
 can still use a slower fallback, but the recommended GitHub Actions setup is to
@@ -1029,6 +1046,14 @@ Check **Settings -> Secrets and variables -> Actions**. Secret names must match
 
 Click the button to enable workflows for this repository, then refresh the
 Actions page.
+
+**Build Runner Image fails with `403 Forbidden`**
+
+This is a GitHub Container Registry permission issue. First set
+**Settings -> Actions -> General -> Workflow permissions** to **Read and write
+permissions**. If it still fails, open the existing package settings and give
+this repository **Write** access under **Manage Actions access**, or delete the
+old `job-hunt-runner` package and rerun the workflow.
 
 **The LLM provider fails**
 
