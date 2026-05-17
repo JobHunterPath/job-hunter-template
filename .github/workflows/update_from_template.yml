@@ -79,8 +79,10 @@ jobs:
             ".dockerignore"
             ".gitignore"
             "Dockerfile"
+            "CHANGELOG.md"
             "README.md"
             "SETUP.md"
+            "VERSION"
             "altacv.cls"
             "requirements.txt"
             "scripts"
@@ -95,6 +97,39 @@ jobs:
             paths+=("linkedin")
           fi
 
+          current_version="$(cat VERSION 2>/dev/null || true)"
+          upstream_version="$(git show "upstream/${UPSTREAM_BRANCH}:VERSION" 2>/dev/null || true)"
+          changelog_excerpt="$(git show "upstream/${UPSTREAM_BRANCH}:CHANGELOG.md" 2>/dev/null | sed -n '1,35p' || true)"
+
+          semver_level="unknown"
+          semver_summary="Could not compare template versions."
+          if [ -z "$current_version" ] && [ -n "$upstream_version" ]; then
+            semver_level="initial"
+            semver_summary="This repository does not have a recorded template version yet. It will be updated to ${upstream_version}."
+          elif [[ "$current_version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] && \
+               [[ "$upstream_version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+            IFS='.' read -r current_major current_minor current_patch <<< "$current_version"
+            IFS='.' read -r upstream_major upstream_minor upstream_patch <<< "$upstream_version"
+            if [ "$upstream_major" -gt "$current_major" ]; then
+              semver_level="major"
+              semver_summary="Major update: review setup, workflow, and config changes carefully before merging."
+            elif [ "$upstream_major" -eq "$current_major" ] && [ "$upstream_minor" -gt "$current_minor" ]; then
+              semver_level="minor"
+              semver_summary="Minor update: new backward-compatible template functionality."
+            elif [ "$upstream_major" -eq "$current_major" ] && \
+                 [ "$upstream_minor" -eq "$current_minor" ] && \
+                 [ "$upstream_patch" -gt "$current_patch" ]; then
+              semver_level="patch"
+              semver_summary="Patch update: fixes, cleanup, or documentation improvements."
+            elif [ "$upstream_version" = "$current_version" ]; then
+              semver_level="same"
+              semver_summary="Template version is unchanged, but maintained files may still differ."
+            else
+              semver_level="local-newer"
+              semver_summary="This repository appears to have a newer template version than the selected upstream."
+            fi
+          fi
+
           git checkout "upstream/${UPSTREAM_BRANCH}" -- "${paths[@]}"
           git add "${paths[@]}"
 
@@ -103,15 +138,31 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore: update from job hunt template"
-          git push --force-with-lease origin "$branch"
+          if [ -n "$upstream_version" ]; then
+            commit_title="chore: update job hunt template to v${upstream_version}"
+          else
+            commit_title="chore: update from job hunt template"
+          fi
 
-          upstream_version="$(git show "upstream/${UPSTREAM_BRANCH}:VERSION" 2>/dev/null || true)"
-          changelog_excerpt="$(git show "upstream/${UPSTREAM_BRANCH}:CHANGELOG.md" 2>/dev/null | sed -n '1,35p' || true)"
+          git commit -m "$commit_title"
+          git push --force-with-lease origin "$branch"
 
           pr_body="$(mktemp)"
           {
             echo "This PR updates the maintained template files from \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`."
+            echo
+            echo "Semantic versioning summary:"
+            echo
+            echo "- Current version: \`${current_version:-unknown}\`"
+            echo "- Upstream version: \`${upstream_version:-unknown}\`"
+            echo "- Update type: \`${semver_level}\`"
+            echo "- Meaning: $semver_summary"
+            echo
+            echo "Versioning rules:"
+            echo
+            echo "- \`PATCH\`: fixes, cleanup, or documentation updates."
+            echo "- \`MINOR\`: backward-compatible new features."
+            echo "- \`MAJOR\`: breaking setup, workflow, or config changes."
             echo
             if [ -n "$upstream_version" ]; then
               echo "Template version: \`${upstream_version}\`"
@@ -126,6 +177,10 @@ jobs:
             echo "- config files, unless \`update_config\` was enabled"
             echo "- LinkedIn workspace, unless \`update_linkedin\` was enabled"
             echo
+            if [ "$semver_level" = "major" ]; then
+              echo "> Important: this is a major template update. Read the changelog and review setup/config changes before merging."
+              echo
+            fi
             echo "Review the changed files, then merge this PR when ready."
             if [ -n "$changelog_excerpt" ]; then
               echo
@@ -138,13 +193,19 @@ jobs:
           } > "$pr_body"
 
           existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
+          if [ -n "$upstream_version" ]; then
+            pr_title="chore: update job hunt template to v${upstream_version} (${semver_level})"
+          else
+            pr_title="chore: update from job hunt template"
+          fi
+
           if [ -n "$existing_pr" ]; then
-            gh pr edit "$existing_pr" --title "chore: update from job hunt template" --body-file "$pr_body"
+            gh pr edit "$existing_pr" --title "$pr_title" --body-file "$pr_body"
             echo "Updated existing PR #$existing_pr."
           else
             gh pr create \
               --base "${GITHUB_REF_NAME}" \
               --head "$branch" \
-              --title "chore: update from job hunt template" \
+              --title "$pr_title" \
               --body-file "$pr_body"
           fi
