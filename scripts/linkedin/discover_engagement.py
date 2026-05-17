@@ -25,13 +25,10 @@ logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
 SYSTEM = """You curate LinkedIn networking and engagement candidates.
 Return JSON only. Do not include markdown fences."""
 
-PROMPT = """Review these public search results and create human-reviewed
-LinkedIn engagement and networking suggestions.
+PROMPT = """Review these public LinkedIn search results and produce human-reviewed
+engagement and networking suggestions. The user acts manually on everything.
 
-The user will act manually. Never instruct automatic posting, commenting,
-following, connecting, or messaging.
-
-POSITIONING:
+POSITIONING (the user's professional context — use this when writing comments):
 {positioning}
 
 TARGET PEOPLE:
@@ -40,36 +37,38 @@ TARGET PEOPLE:
 TOPICS:
 {topics}
 
-MESSAGE RULES:
-- no job ask
-- no referral ask
-- no generic flattery
-- no "pick your brain"
-- max {max_message_words} words per message
-- ask for discussion only when it feels natural
-- each message_variant must reference something specific about this person:
-  their actual role, company, a product they built, or what they post about
-  as visible in the search snippet — not just the broad topic name
+COMMENT RULES (for posts):
+- Write a 1-2 sentence draft comment the user can post as-is or lightly edit
+- Write from the user's positioning above — add a concrete perspective or
+  observation, not just agreement or praise
+- Reference something specific in the post excerpt: a claim, trade-off, data
+  point, or framing that the user can react to from their own experience
+- Do not open with "useful framing", "great post", "I agree", or generic openers
+- Do not write a comment that could apply to any post on the same topic
+- Max 40 words
+- If the excerpt is too thin to write something specific, return an empty string
 
-COMMENT RULES:
-- suggested_comment must engage with something concrete in the post: a specific
-  claim, data point, framework, trade-off, or observation from the description
-- do not open with "useful framing" or similar generic phrases
-- do not write a comment that could apply to any post on the same topic
-- max 30 words
-- if the description is too thin to write something specific, return an empty string
+MESSAGE RULES (for people):
+- No job ask, no referral ask, no generic flattery, no "pick your brain"
+- Max {max_message_words} words per message
+- Each variant must reference something specific about this person: their actual
+  role, company, a product they built, or what they post about — not just the
+  topic name
 
 FORBIDDEN PHRASES:
 {forbidden_phrases}
 
-SEARCH RESULTS:
-{results}
+POSTS (with excerpts):
+{posts}
+
+PEOPLE:
+{people}
 
 Return a JSON object with keys "people" and "posts".
 Each person: name, role_or_context, url, why_relevant, relationship_type,
 suggested_action, message_variants (list of 2 strings, each specific to this person).
 Each post: author_or_source, topic, url, why_relevant, suggested_comment
-(specific to this post's content, or empty string if description is too thin)."""
+(ready-to-post 1-2 sentence draft from the user's POV, or empty string)."""
 
 
 def _topic_from_query(query: str) -> str:
@@ -133,6 +132,26 @@ def _is_recent_post(description: str, max_age_days: int = 28) -> bool:
     if post_dt is None:
         return True
     return (date.today() - post_dt).days <= max_age_days
+
+
+def _strip_date_prefix(description: str) -> str:
+    """Remove leading 'MMM D, YYYY · ' from a LinkedIn search snippet."""
+    return _DATE_RE.sub("", description or "").lstrip()
+
+
+_LOGIN_WALL_PHRASES = (
+    "agree & join linkedin",
+    "sign in to linkedin",
+    "join linkedin",
+    "by clicking continue",
+    "by clicking agree",
+)
+
+
+def _is_login_wall(description: str) -> bool:
+    """True when the search snippet is a LinkedIn auth page rather than post content."""
+    lower = (description or "").lower()
+    return any(phrase in lower for phrase in _LOGIN_WALL_PHRASES)
 
 
 def _message_variants(name: str, role_context: str, description: str, max_words: int) -> list[str]:
@@ -220,7 +239,10 @@ def _collect_results(config: dict) -> list[dict]:
                 url = item.get("url", "")
                 if not url or url in seen:
                     continue
-                if "/posts/" in url and not _is_recent_post(item.get("description", "")):
+                description = item.get("description", "")
+                if _is_login_wall(description):
+                    continue
+                if "/posts/" in url and not _is_recent_post(description):
                     continue
                 seen.add(url)
                 collected.append({"query": query, **item})
@@ -259,16 +281,20 @@ def _render_posts(items: list[dict]) -> str:
     sections = []
     for item in items:
         comment = item.get("suggested_comment", "")
+        raw_desc = item.get("why_relevant", "")
+        excerpt = _strip_date_prefix(raw_desc)
+        post_dt = _post_date(raw_desc)
         lines = [
-            f"### {item.get('topic', 'Post to review')}",
+            f"### {item.get('author_or_source', 'Post to review')}",
             "",
-            f"- Author/source: {item.get('author_or_source', '')}",
-            f"- Link: {item.get('url', '')}",
-            f"- Why relevant: {item.get('why_relevant', '')}",
         ]
+        if post_dt:
+            lines.append(f"- Posted: {post_dt.strftime('%b')} {post_dt.day}, {post_dt.year}")
+        lines.append(f"- Topic: {item.get('topic', '')}")
+        lines.append(f"- Link: {item.get('url', '')}")
+        lines.append(f"- Excerpt: {excerpt}")
         if comment:
-            lines.append(f"- Suggested comment: {comment}")
-        lines.append("- Action: review manually")
+            lines.append(f"- Draft comment: {comment}")
         lines.append("")
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
@@ -283,15 +309,21 @@ def discover(config_path: Path | None = None) -> dict:
 
     discovery = config.get("engagement_discovery", {})
     networking = config.get("networking", {})
+    post_results = [r for r in raw_results if "/posts/" in r.get("url", "")]
+    people_results = [r for r in raw_results if "/in/" in r.get("url", "")]
     prompt = PROMPT.format(
         positioning=config.get("positioning", ""),
         target_people=format_yaml_list(networking.get("target_people", [])),
         topics=format_yaml_list(discovery.get("topics", [])),
         max_message_words=int(networking.get("max_message_words", 70)),
         forbidden_phrases=format_yaml_list(config.get("forbidden_phrases", [])),
-        results=format_yaml_list([
+        posts=format_yaml_list([
+            f"{item.get('title', '')} | {item.get('url', '')} | {_strip_date_prefix(item.get('description', ''))}"
+            for item in post_results[:20]
+        ]),
+        people=format_yaml_list([
             f"{item.get('title', '')} | {item.get('url', '')} | {item.get('description', '')}"
-            for item in raw_results[:40]
+            for item in people_results[:20]
         ]),
     )
     try:

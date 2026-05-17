@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `492d5db` linkedin: clear stale engagement and networking queues
+
+
 ## 2.4.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
