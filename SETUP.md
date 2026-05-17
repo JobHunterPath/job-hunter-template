@@ -494,7 +494,45 @@ llm:
     discovery: openai
     linkedin: openai
     jd_extraction: openai
+  models:
+    validation: "REPLACE_WITH_OPENAI_MODEL"
+    scoring: "REPLACE_WITH_OPENAI_MODEL"
+    tailoring: "REPLACE_WITH_OPENAI_MODEL"
+    cover_letter: "REPLACE_WITH_OPENAI_MODEL"
+    discovery: "REPLACE_WITH_OPENAI_MODEL"
+    linkedin: "REPLACE_WITH_OPENAI_MODEL"
+    jd_extraction: "REPLACE_WITH_OPENAI_MODEL"
 ```
+
+Important: if you change the LLM provider, you must also change every model name
+under `llm.models`. Anthropic model names do not work with OpenAI, OpenAI model
+names do not work with Google, and so on.
+
+How to find valid model names:
+
+- Anthropic Claude: open `https://docs.anthropic.com/en/docs/about-claude/models/all-models`
+  and copy the **Anthropic API** model name.
+- OpenAI: open `https://platform.openai.com/docs/models`, or list models with
+  the API after setting `OPENAI_API_KEY`:
+
+```bash
+curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+- Google Gemini: open `https://ai.google.dev/gemini-api/docs/models`, or use
+  the Gemini API model-list docs at
+  `https://ai.google.dev/api/rest/generativelanguage/models/list`.
+- Ollama: open `https://ollama.com/search`, choose a model, pull it locally,
+  then use the pulled model name:
+
+```bash
+ollama pull llama3.2
+ollama list
+```
+
+Use cheaper/faster models for `validation`, `scoring`, and `jd_extraction`.
+Use stronger models for `tailoring`, `cover_letter`, `discovery`, and
+`linkedin`.
 
 Use the matching secret name:
 
@@ -870,7 +908,8 @@ Check **Settings -> Secrets and variables -> Actions**. Secret names must match
 
 Check `config/api_config.yml`. The provider name, role providers, model names,
 and required secret must match. If you changed providers, make sure every role
-uses the new provider or intentionally mixes providers.
+uses the new provider or intentionally mixes providers. Also replace every
+`llm.models.*` value with a valid model name from that provider.
 
 **PDF was not generated**
 
