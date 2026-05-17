@@ -212,15 +212,44 @@ def test_discover_engagement_falls_back_on_malformed_json(tmp_path):
         result = discover_engagement.discover(cfg)
 
     assert len(result["people"]) == 1
-    assert len(result["posts"]) == 1
+    assert len(result["posts"]) == 0
     person = result["people"][0]
-    post = result["posts"][0]
     assert person["suggested_action"] == "review manually"
     assert person["relationship_type"] == "peer_conversation"
     assert person["message_variants"]
-    assert not post["suggested_comment"]
     assert "Example Product Leader" in (tmp_path / "networking.md").read_text(encoding="utf-8")
-    assert post["url"] in (tmp_path / "engagement.md").read_text(encoding="utf-8")
+    engagement = (tmp_path / "engagement.md").read_text(encoding="utf-8")
+    assert "https://www.linkedin.com/posts/example" not in engagement
+    assert "_No post suggestions returned._" in engagement
+
+
+def test_blank_model_comments_are_skipped(tmp_path):
+    cfg = _config(tmp_path)
+    search_result = [{
+        "url": "https://www.linkedin.com/posts/example",
+        "title": "AI coding tools as interns - LinkedIn",
+        "description": "AI coding tools work better when teams add review loops and clear delegation.",
+        "source": "SearXNG",
+    }]
+    payload = json.dumps({
+        "people": [],
+        "posts": [{
+            "author_or_source": "AI coding tools as interns",
+            "topic": "internal developer platforms",
+            "url": "https://www.linkedin.com/posts/example",
+            "why_relevant": "AI coding tools work better when teams add review loops and clear delegation.",
+            "suggested_comment": "",
+        }],
+    })
+
+    with patch("linkedin.discover_engagement.search_web", return_value=search_result), \
+         patch("linkedin.discover_engagement.complete_linkedin", return_value=payload):
+        result = discover_engagement.discover(cfg)
+
+    assert result["posts"] == []
+    engagement = (tmp_path / "engagement.md").read_text(encoding="utf-8")
+    assert "https://www.linkedin.com/posts/example" not in engagement
+    assert "_No post suggestions returned._" in engagement
 
 
 def test_login_wall_results_are_filtered(tmp_path):
