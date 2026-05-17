@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `f144b78` linkedin: skip posts without draft comments
+
+
 ## 2.5.0 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.

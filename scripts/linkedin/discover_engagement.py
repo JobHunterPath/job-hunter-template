@@ -108,6 +108,12 @@ def _trim_words(text: str, max_words: int) -> str:
     return " ".join(words[:max_words]).rstrip(".,;:") + "."
 
 
+def _clean_excerpt(text: str) -> str:
+    text = _strip_date_prefix(text or "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 _DATE_RE = re.compile(r"^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{4})\s+·")
 _MONTHS = {m: i + 1 for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -280,9 +286,9 @@ def _render_posts(items: list[dict]) -> str:
         return "_No post suggestions returned._"
     sections = []
     for item in items:
-        comment = item.get("suggested_comment", "")
+        comment = _trim_words(str(item.get("suggested_comment", "")).strip(), 40)
         raw_desc = item.get("why_relevant", "")
-        excerpt = _strip_date_prefix(raw_desc)
+        excerpt = _clean_excerpt(raw_desc)
         post_dt = _post_date(raw_desc)
         lines = [
             f"### {item.get('author_or_source', 'Post to review')}",
@@ -338,7 +344,18 @@ def discover(config_path: Path | None = None) -> dict:
         raise ValueError("Discovery response must be a JSON object")
 
     people = list(payload.get("people", []))[: int(networking.get("suggestions_per_run", 8))]
-    posts = list(payload.get("posts", []))[: int(discovery.get("posts_per_run", 8))]
+    posts = []
+    for item in list(payload.get("posts", [])):
+        if not isinstance(item, dict):
+            continue
+        item = dict(item)
+        comment = str(item.get("suggested_comment", "")).strip()
+        if not comment:
+            continue
+        item["suggested_comment"] = _trim_words(comment, 40)
+        posts.append(item)
+        if len(posts) >= int(discovery.get("posts_per_run", 8)):
+            break
 
     append_section(
         configured_path(config, "networking"),
