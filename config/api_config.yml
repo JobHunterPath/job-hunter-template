@@ -10,18 +10,21 @@ llm:
     tailoring: anthropic
     cover_letter: anthropic
     discovery: anthropic
+    linkedin: anthropic
   models:
     validation: "claude-haiku-4-5-20251001"
     scoring: "claude-haiku-4-5-20251001"
     tailoring: "claude-sonnet-4-6"
     cover_letter: "claude-sonnet-4-6"
     discovery: "claude-sonnet-4-6"
+    linkedin: "claude-sonnet-4-6"
   max_tokens:
     validation: 200
     scoring: 500
     tailoring: 4000
     cover_letter: 800
     discovery: 400
+    linkedin: 1800
 
 ollama:
   base_url: "http://localhost:11434"
