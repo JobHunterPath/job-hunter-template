@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.3 - 2026-05-17
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `2ba3053` docs: restore api key setup steps
+
+
 ## 2.8.2 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.

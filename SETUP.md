@@ -540,6 +540,53 @@ Use the matching secret name:
 - OpenAI: `OPENAI_API_KEY`
 - Google Gemini: `GOOGLE_API_KEY`
 
+### Create An Anthropic Claude API Key
+
+Use this if `config/api_config.yml` uses `anthropic`.
+
+1. Open `https://console.anthropic.com/`.
+2. Create an account or sign in.
+3. Add billing if Anthropic asks for it.
+4. Open the API keys section.
+5. Create a new API key.
+6. Copy it immediately. You may not be able to see it again.
+7. Store it in GitHub Secrets as:
+
+```text
+ANTHROPIC_API_KEY
+```
+
+### Create An OpenAI API Key
+
+Use this if `config/api_config.yml` uses `openai`.
+
+1. Open `https://platform.openai.com/`.
+2. Create an account or sign in.
+3. Create or select a project if prompted.
+4. Open the API keys section.
+5. Create a new API key.
+6. Copy it immediately.
+7. Store it in GitHub Secrets as:
+
+```text
+OPENAI_API_KEY
+```
+
+### Create A Google Gemini API Key
+
+Use this if `config/api_config.yml` uses `google`.
+
+1. Open `https://aistudio.google.com/`.
+2. Sign in with your Google account.
+3. Open API keys.
+4. Create a new API key.
+5. Copy it immediately.
+6. Store it in GitHub Secrets as:
+
+```text
+GOOGLE_API_KEY
+```
+
 Ollama can work locally, but GitHub-hosted Actions cannot use Ollama running on
 your laptop. Use Anthropic, OpenAI, or Google for scheduled GitHub Actions.
 
@@ -552,6 +599,58 @@ Optional search-provider secrets:
 
 The pipeline can still use direct ATS scraping, HTTP scraping, Playwright, and
 temporary SearXNG in GitHub Actions when optional search keys are missing.
+
+### Create A Brave Search API Key, Optional
+
+Brave helps with broader web search when direct company scraping is not enough.
+
+1. Open `https://brave.com/search/api/`.
+2. Create an account or sign in.
+3. Choose a plan.
+4. Create or copy your API key.
+5. Store it in GitHub Secrets as:
+
+```text
+BRAVE_API_KEY
+```
+
+### Create A Tavily API Key, Optional
+
+1. Open `https://tavily.com/`.
+2. Create an account or sign in.
+3. Copy your API key from the dashboard.
+4. Store it in GitHub Secrets as:
+
+```text
+TAVILY_API_KEY
+```
+
+### Create An Exa API Key, Optional
+
+1. Open `https://exa.ai/`.
+2. Create an account or sign in.
+3. Copy your API key from the dashboard.
+4. Store it in GitHub Secrets as:
+
+```text
+EXA_API_KEY
+```
+
+### Create A RapidAPI / JSearch Key, Optional
+
+JSearch can add job-board results, but the pipeline can run without it.
+
+1. Open `https://rapidapi.com/`.
+2. Create an account or sign in.
+3. Search for the JSearch API.
+4. Subscribe to JSearch if you want to use it.
+5. Open your RapidAPI app or project.
+6. Copy the RapidAPI key.
+7. Store it in GitHub Secrets as:
+
+```text
+RAPIDAPI_KEY
+```
 
 ## 14. Configure Job Search Regions And Companies
 
