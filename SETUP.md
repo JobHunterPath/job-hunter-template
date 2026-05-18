@@ -117,6 +117,11 @@ require more copying and pasting.
 
 No virtual environment is required for this guide.
 
+`requirements.txt` includes the SDKs for the supported cloud LLM providers:
+Anthropic, OpenAI, and Google Gemini. Keep the SDK for any provider you configure
+in `config/api_config.yml`. If a provider SDK is missing, the pipeline fails with
+an install hint such as `python -m pip install openai`.
+
 In the VS Code terminal, run these from the repository root:
 
 ```bash
@@ -481,6 +486,15 @@ Supported providers:
 - `google`
 - `ollama`
 
+When changing providers, update four things together:
+
+1. `llm.default_provider` and every `llm.providers.*` role you want to move.
+2. Every matching `llm.models.*` value, using model names from that same provider.
+3. The matching entry under `secrets:`. Set the provider you use to
+   `required: true`; set providers you are not using to `required: false`.
+4. `requirements.txt`. It includes the supported cloud LLM SDKs by default. If
+   you later remove unused SDKs, add back the SDK for the provider you choose.
+
 To switch everything to OpenAI, for example:
 
 ```yaml
@@ -502,11 +516,33 @@ llm:
     discovery: "REPLACE_WITH_OPENAI_MODEL"
     linkedin: "REPLACE_WITH_OPENAI_MODEL"
     jd_extraction: "REPLACE_WITH_OPENAI_MODEL"
+secrets:
+  anthropic:
+    env_var: "ANTHROPIC_API_KEY"
+    required: false
+  openai:
+    env_var: "OPENAI_API_KEY"
+    required: true
+  google:
+    env_var: "GOOGLE_API_KEY"
+    required: false
 ```
 
 Important: if you change the LLM provider, you must also change every model name
 under `llm.models`. Anthropic model names do not work with OpenAI, OpenAI model
 names do not work with Google, and so on.
+
+Provider dependency checklist:
+
+| Provider in `api_config.yml` | Required Python package in `requirements.txt` | Secret to add | `secrets.<provider>.required` |
+|---|---|---|---|
+| `anthropic` | `anthropic` | `ANTHROPIC_API_KEY` | `true` |
+| `openai` | `openai` | `OPENAI_API_KEY` | `true` |
+| `google` | `google-generativeai` | `GOOGLE_API_KEY` | `true` |
+| `ollama` | `openai` | none for local Ollama | no secret required |
+
+If you mix providers by role, mark every provider you actually use as
+`required: true` and add every matching GitHub secret.
 
 How to find valid model names:
 
@@ -539,6 +575,10 @@ Use the matching secret name:
 - Anthropic: `ANTHROPIC_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Google Gemini: `GOOGLE_API_KEY`
+
+The workflow files expose all three cloud LLM secret names to Python. Empty
+unused secrets are fine, but the secret for the configured provider must exist
+before running Actions.
 
 ### Create An Anthropic Claude API Key
 
@@ -775,6 +815,17 @@ Add:
 - one LLM key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`
 - optional search keys: `BRAVE_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`, `RAPIDAPI_KEY`
 - `TEMPLATE_REPO_PAT` for future template updates
+
+After adding a different LLM secret, re-check `config/api_config.yml`:
+
+- If using Anthropic only, `secrets.anthropic.required` should be `true`, while
+  `secrets.openai.required` and `secrets.google.required` should be `false`.
+- If using OpenAI only, `secrets.openai.required` should be `true`, while
+  `secrets.anthropic.required` and `secrets.google.required` should be `false`.
+- If using Google only, `secrets.google.required` should be `true`, while
+  `secrets.anthropic.required` and `secrets.openai.required` should be `false`.
+- If intentionally mixing providers, every provider used in `llm.providers`
+  needs `required: true` and a matching GitHub secret.
 
 The upstream job-hunter template is private, so `TEMPLATE_REPO_PAT` is needed if
 you want **Update From Template** to fetch future updates.
@@ -1060,7 +1111,10 @@ old `job-hunt-runner` package and rerun the workflow.
 Check `config/api_config.yml`. The provider name, role providers, model names,
 and required secret must match. If you changed providers, make sure every role
 uses the new provider or intentionally mixes providers. Also replace every
-`llm.models.*` value with a valid model name from that provider.
+`llm.models.*` value with a valid model name from that provider. Check
+`secrets.<provider>.required`: the provider you use should be `true`, and unused
+providers should be `false`. If the error mentions `python -m pip install ...`,
+confirm `requirements.txt` includes that provider's Python package.
 
 **PDF was not generated**
 

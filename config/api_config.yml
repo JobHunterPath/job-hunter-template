@@ -3,6 +3,7 @@
 # your local keyring. Do not commit API keys.
 
 llm:
+  # The matching Python SDK must be installed from requirements.txt.
   default_provider: anthropic
   providers:
     validation: anthropic
@@ -35,6 +36,8 @@ ollama:
   base_url: "http://localhost:11434"
 
 secrets:
+  # Set required: true only for providers used in llm.default_provider or
+  # llm.providers.*; set unused providers to false.
   anthropic:
     env_var: "ANTHROPIC_API_KEY"
     required: true
