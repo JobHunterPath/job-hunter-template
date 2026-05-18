@@ -54,7 +54,7 @@ installing LaTeX on every job run. New repos build this repo-scoped image:
    - `tailoring_config.yml` (controls what the AI can change, including project
      content selection when an uncommented Projects section exists in your resume)
 5. In `config/api_config.yml`, set `profile.resume_tex`, `profile.story_bank`, and `profile.project_instructions`.
-6. If you change LLM provider, replace the `llm.models` values with valid model names from that provider.
+6. If you change LLM provider, replace the `llm.models` values, add the matching secret, and set the matching `secrets.<provider>.required` flag.
 7. Create and store API keys using the step-by-step instructions in `SETUP.md`.
 8. Run the preflight checklist, commit, and push before starting GitHub Actions.
 9. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
@@ -79,6 +79,18 @@ project count, bullet count, and page limit in
 Search APIs are optional except for the LLM provider you choose. After direct
 ATS, HTTP/BeautifulSoup, and Playwright scraping, the default search-provider
 fallback order is configured in `config/api_config.yml`:
+
+For LLM providers, `config/api_config.yml`, GitHub Secrets, and
+`requirements.txt` must agree:
+
+| Provider | Python package | Secret |
+|---|---|---|
+| `anthropic` | `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `openai` | `OPENAI_API_KEY` |
+| `google` | `google-generativeai` | `GOOGLE_API_KEY` |
+| `ollama` | `openai` | none for local Ollama |
+
+Set `secrets.<provider>.required: true` only for providers you actually use.
 
 ```yaml
 http:

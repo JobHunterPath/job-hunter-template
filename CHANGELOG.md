@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.6 - 2026-05-18
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `54bcdc4` docs: clarify LLM provider setup
+
+
 ## 2.8.5 - 2026-05-17
 
 - Synced reusable template updates from the private source repository.
