@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.1 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `21734d0` fix(scraper): add per-company progress logging and fix ai-web-search JSON parse
+
+
 ## 2.11.0 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

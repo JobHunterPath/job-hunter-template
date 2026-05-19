@@ -333,8 +333,20 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 logger.debug("[scraper] Filtered %s ineligible results from %s", filtered_count, company_name)
 
     total_scrape_timeout = int(scraping_cfg.get("total_timeout_seconds", 1800))
+    total_companies = len(companies)
+    company_counter = 0
+    company_counter_lock = threading.Lock()
+
+    def _process_company_tracked(company: dict) -> None:
+        nonlocal company_counter
+        with company_counter_lock:
+            company_counter += 1
+            idx = company_counter
+        logger.info("[scraper] [%d/%d] %s", idx, total_companies, company["name"])
+        _process_company(company)
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_process_company, company): company for company in companies}
+        futures = {executor.submit(_process_company_tracked, company): company for company in companies}
         try:
             for future in as_completed(futures, timeout=total_scrape_timeout):
                 company = futures[future]
