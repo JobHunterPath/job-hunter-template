@@ -13,15 +13,36 @@ import logging
 from datetime import datetime, timezone
 import requests
 
-from core.config import get_timeout
+from core.config import get_timeout, load_api_config
 from core.utils import strip_html, location_matches, title_matches
 
 _TIMEOUT = get_timeout("job_boards")
+_JSEARCH_FAILURES = 0
 
 logger = logging.getLogger(__name__)
 
 ARBEITNOW_URL = "https://www.arbeitnow.com/api/job-board-api"
 JSEARCH_URL = "https://jsearch.p.rapidapi.com/search"
+
+
+def _jsearch_max_consecutive_failures() -> int:
+    cfg = load_api_config().get("http", {}).get("job_boards", {})
+    try:
+        return int(cfg.get("max_consecutive_failures", 3))
+    except (TypeError, ValueError):
+        return 3
+
+
+def _jsearch_suppressed() -> bool:
+    max_failures = _jsearch_max_consecutive_failures()
+    if max_failures <= 0 or _JSEARCH_FAILURES < max_failures:
+        return False
+
+    logger.warning(
+        "[jsearch] skipped after %s consecutive failure(s)",
+        _JSEARCH_FAILURES,
+    )
+    return True
 
 
 def _parse_arbeitnow_date(value) -> str:
@@ -97,6 +118,8 @@ def fetch_jsearch_jobs(
     Issues one request per title (to stay within the free tier of 200 req/month).
     Returns [] immediately if no API key is provided.
     """
+    global _JSEARCH_FAILURES
+
     if not rapidapi_key:
         logger.warning("[jsearch] No RAPIDAPI_KEY configured — skipping")
         return []
@@ -108,6 +131,9 @@ def fetch_jsearch_jobs(
 
     if not title_filters:
         logger.warning("[jsearch] No configured job titles; skipping")
+        return []
+
+    if _jsearch_suppressed():
         return []
 
     exclusions = " ".join(f'-"{term}"' for term in (excluded_title_terms or []))
@@ -138,8 +164,18 @@ def fetch_jsearch_jobs(
                 )
                 resp.raise_for_status()
                 data = resp.json().get("data", [])
+                _JSEARCH_FAILURES = 0
             except Exception as e:
-                logger.warning(f"[jsearch] query={query!r} page={page}: {e}")
+                _JSEARCH_FAILURES += 1
+                max_failures = _jsearch_max_consecutive_failures()
+                logger.warning(
+                    "[jsearch] query=%r page=%s: %s (failure %s/%s)",
+                    query,
+                    page,
+                    e,
+                    _JSEARCH_FAILURES,
+                    max_failures,
+                )
                 break
 
             for job in data:

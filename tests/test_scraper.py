@@ -69,6 +69,15 @@ def test_valid_job_url_rejects_single_segment_ats():
 def test_valid_job_url_accepts_two_segment_path():
     assert scraper.is_valid_job_url('https://jobs.testco.com/en/job/12345') is True
 
+def test_excluded_url_patterns_are_configured():
+    config = {
+        'exclusion_rules': {
+            'excluded_url_patterns': [r'linkedin\.com/jobs/search'],
+        },
+    }
+    assert scraper.is_excluded_url('https://www.linkedin.com/jobs/search?keywords=pm', config) is True
+    assert scraper.is_excluded_url('https://www.linkedin.com/jobs/view/123', config) is False
+
 
 # ── is_stale_posting() ───────────────────────────────────────────────────────
 
@@ -181,6 +190,18 @@ def test_scrape_brave_deduplicates_same_url():
     urls = [j['url'] for j in jobs]
     assert len(urls) == len(set(urls))
 
+def test_scrape_deduplicates_canonical_urls():
+    raw = [
+        {'url': 'https://www.jobs.testco.com/en/pm?utm_source=x&a=1', 'title': 'Product Manager', 'description': 'role at TestCo'},
+        {'url': 'https://jobs.testco.com/en/pm?a=1', 'title': 'Product Manager duplicate', 'description': 'same url'},
+    ]
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=None), \
+         patch('sources.scraper.requests.get', return_value=_mock_http(raw)):
+        jobs = scraper.scrape()
+    assert len(jobs) == 1
+
 def test_scrape_brave_skips_invalid_urls():
     raw = [{'url': 'https://boards.greenhouse.io/testco', 'title': 'PM', 'description': 'great role'}]
     with patch('sources.scraper.load_search_config', return_value=CONFIG), \
@@ -246,6 +267,23 @@ def test_scrape_returns_empty_on_no_companies():
         jobs = scraper.scrape()
     assert jobs == []
 
+
+def test_scrape_runs_ai_web_search_without_companies():
+    ai_job = {
+        "title": "Product Owner",
+        "company": "LinkedCo",
+        "url": "https://www.linkedin.com/jobs/view/123456",
+        "posted": "",
+        "snippet": "Product backlog role",
+        "source": "AI web search: linkedin",
+    }
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=[]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[ai_job]):
+        jobs = scraper.scrape()
+
+    assert jobs == [ai_job]
+
 def test_scrape_brave_continues_after_api_error():
     with patch('sources.scraper.load_search_config', return_value=CONFIG), \
          patch('sources.scraper.load_companies', return_value=COMPANIES), \
@@ -253,6 +291,31 @@ def test_scrape_brave_continues_after_api_error():
          patch('sources.scraper.requests.get', side_effect=Exception('timeout')):
         jobs = scraper.scrape()
     assert jobs == []
+
+
+def test_scrape_allows_ai_web_search_linkedin_job_urls():
+    config = {
+        **CONFIG,
+        "exclusion_rules": {
+            **CONFIG["exclusion_rules"],
+            "excluded_url_patterns": [r"linkedin\.com/jobs/"],
+        },
+    }
+    ai_job = {
+        "title": "Product Owner",
+        "company": "LinkedCo",
+        "url": "https://www.linkedin.com/jobs/view/123456",
+        "posted": "",
+        "snippet": "Product backlog role",
+        "source": "AI web search: linkedin",
+    }
+    with patch('sources.scraper.load_search_config', return_value=config), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[ai_job]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[]):
+        jobs = scraper.scrape()
+
+    assert jobs == [ai_job]
 
 
 # ── scrape() — ATS path ───────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import List
 
 from core.config import setup_logging, load_api_config, profile_path
-from core.utils import title_matches
+from core.utils import title_matches, url_is_alive
 from sources.scraper import scrape
 from pipeline.validator import validate
 from pipeline.scorer import filter_matches
@@ -271,6 +271,32 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
     return [enriched.get(j["url"], j) for j in jobs]
 
 
+def _drop_dead_urls_before_enrichment(jobs: list[dict], api_cfg: dict) -> list[dict]:
+    """Avoid fetching full JDs for postings that already fail URL verification."""
+    url_cfg = api_cfg.get("http", {}).get("url_verification", {})
+    if not url_cfg.get("enabled", True):
+        return jobs
+
+    timeout = int(url_cfg.get("timeout_seconds", 5))
+    alive: list[dict] = []
+    rejected = 0
+    for job in jobs:
+        url = job.get("url", "")
+        if url and not url_is_alive(url, timeout):
+            rejected += 1
+            logger.info(
+                "[pipeline] Skipping dead URL before enrichment: %s @ %s",
+                job.get("title", "?")[:50],
+                job.get("company", "?"),
+            )
+            continue
+        alive.append(job)
+
+    if rejected:
+        logger.info("[pipeline] Dropped %s dead URL(s) before enrichment", rejected)
+    return alive
+
+
 # ── Match processing ───────────────────────────────────────────────────────────
 
 def _process_match(match: dict) -> bool:
@@ -448,6 +474,11 @@ def run(args: argparse.Namespace) -> int:
         jobs, existing_urls, existing_titles = _jobs_from_hunt(args.region)
         if not jobs:
             logger.warning("[pipeline] No new jobs found. Exiting.")
+            return 0
+
+        jobs = _drop_dead_urls_before_enrichment(jobs, api_cfg)
+        if not jobs:
+            logger.warning("[pipeline] All scraped jobs failed URL verification before enrichment.")
             return 0
 
         logger.info("[pipeline] Step 1b: Enriching sparse job descriptions...")

@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from sources import job_boards
 
 
@@ -11,6 +13,13 @@ def _mock_get(data, status=200):
     resp.raise_for_status = MagicMock()
     resp.json.return_value = data
     return resp
+
+
+@pytest.fixture(autouse=True)
+def reset_jsearch_failure_state():
+    job_boards._JSEARCH_FAILURES = 0
+    yield
+    job_boards._JSEARCH_FAILURES = 0
 
 
 ARBEITNOW_JOB = {
@@ -143,6 +152,27 @@ def test_jsearch_returns_empty_on_api_error():
     with patch("sources.job_boards.requests.get", side_effect=Exception("timeout")):
         jobs = job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key")
     assert jobs == []
+
+
+def test_jsearch_skips_after_configured_consecutive_failures():
+    config = {"http": {"job_boards": {"max_consecutive_failures": 3}}}
+    with patch("sources.job_boards.load_api_config", return_value=config), \
+            patch("sources.job_boards.requests.get", side_effect=Exception("limit")) as mock_get:
+        for _ in range(4):
+            jobs = job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key")
+            assert jobs == []
+
+    assert mock_get.call_count == 3
+
+
+def test_jsearch_success_resets_failure_count():
+    job_boards._JSEARCH_FAILURES = 2
+    with patch("sources.job_boards.requests.get", return_value=_mock_get(JSEARCH_RESPONSE)):
+        jobs = job_boards.fetch_jsearch_jobs(["Product Manager"], "Berlin", "test-key")
+
+    assert len(jobs) == 1
+    assert job_boards._JSEARCH_FAILURES == 0
+
 
 def test_jsearch_makes_one_request_per_title():
     with patch("sources.job_boards.requests.get", return_value=_mock_get(JSEARCH_RESPONSE)) as mock_get:

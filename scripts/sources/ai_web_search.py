@@ -1,0 +1,285 @@
+"""AI-assisted web search for title-and-region job discovery."""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from dataclasses import dataclass
+from typing import Any
+from urllib.parse import quote
+
+import requests
+
+from core.config import get_secret, load_api_config
+
+logger = logging.getLogger(__name__)
+
+ROLE = "ai_web_search"
+GOOGLE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+SYSTEM_PROMPT = """You find public job postings. Return only valid JSON.
+Rules:
+- Search only for the exact query provided by the user.
+- Return individual job-posting URLs, not generic search/listing pages.
+- Do not invent companies, titles, locations, dates, or URLs.
+- Prefer current, open postings.
+- The response must be a JSON array of objects with:
+  title, company, location, url, source, snippet, confidence.
+"""
+
+
+@dataclass
+class AIWebSearchBudget:
+    max_prompts_per_run: int
+    max_prompts_per_region: int
+    max_results_per_prompt: int
+    max_results_per_region: int
+    max_total_results_per_run: int
+    prompts_used: int = 0
+    results_used: int = 0
+    prompts_by_region: dict[str, int] | None = None
+    results_by_region: dict[str, int] | None = None
+
+    def __post_init__(self) -> None:
+        self.prompts_by_region = {}
+        self.results_by_region = {}
+
+    def can_prompt(self, region_name: str) -> bool:
+        if self.prompts_used >= self.max_prompts_per_run:
+            return False
+        return self.prompts_by_region.get(region_name, 0) < self.max_prompts_per_region
+
+    def record_prompt(self, region_name: str) -> None:
+        self.prompts_used += 1
+        self.prompts_by_region[region_name] = self.prompts_by_region.get(region_name, 0) + 1
+
+    def remaining_results(self, region_name: str) -> int:
+        run_remaining = self.max_total_results_per_run - self.results_used
+        region_remaining = self.max_results_per_region - self.results_by_region.get(region_name, 0)
+        return max(0, min(run_remaining, region_remaining, self.max_results_per_prompt))
+
+    def record_results(self, region_name: str, count: int) -> None:
+        self.results_used += count
+        self.results_by_region[region_name] = self.results_by_region.get(region_name, 0) + count
+
+
+def ai_web_search_config() -> dict[str, Any]:
+    return (
+        load_api_config()
+        .get("http", {})
+        .get("search_providers", {})
+        .get("ai_web_search", {})
+        or {}
+    )
+
+
+def enabled() -> bool:
+    return bool(ai_web_search_config().get("enabled", False))
+
+
+def _int_cfg(config: dict[str, Any], key: str, default: int) -> int:
+    try:
+        return int(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def make_budget(config: dict[str, Any] | None = None) -> AIWebSearchBudget:
+    config = config or ai_web_search_config()
+    return AIWebSearchBudget(
+        max_prompts_per_run=_int_cfg(config, "max_prompts_per_run", 30),
+        max_prompts_per_region=_int_cfg(config, "max_prompts_per_region", 10),
+        max_results_per_prompt=_int_cfg(config, "max_results_per_prompt", 8),
+        max_results_per_region=_int_cfg(config, "max_results_per_region", 30),
+        max_total_results_per_run=_int_cfg(config, "max_total_results_per_run", 60),
+    )
+
+
+def _source_configs(config: dict[str, Any]) -> dict[str, Any]:
+    return config.get("sources") or {}
+
+
+def build_queries(title: str, region_config: dict[str, Any], config: dict[str, Any]) -> list[tuple[str, str]]:
+    location = region_config.get("location") or region_config.get("name") or ""
+    queries: list[tuple[str, str]] = []
+
+    for source, source_cfg in _source_configs(config).items():
+        if not source_cfg.get("enabled", True):
+            continue
+        for template in source_cfg.get("query_templates", []):
+            query = template.format(title=title, location=location).strip()
+            if query:
+                queries.append((source, query))
+
+    return queries
+
+
+def _llm_settings() -> tuple[str, str, int]:
+    cfg = load_api_config()
+    llm = cfg.get("llm", {})
+    provider = llm.get("providers", {}).get(ROLE) or llm.get("default_provider", "")
+    model = llm.get("models", {}).get(ROLE, "")
+    max_tokens = int(llm.get("max_tokens", {}).get(ROLE, 1200))
+    if not provider or not model:
+        raise RuntimeError("Missing llm.providers.ai_web_search or llm.models.ai_web_search")
+    return provider, model, max_tokens
+
+
+def _provider_secret(provider: str) -> str:
+    cfg = load_api_config()
+    provider_cfg = cfg.get("secrets", {}).get(provider, {})
+    env_var = provider_cfg.get("env_var", "")
+    if not env_var:
+        raise RuntimeError(f"Missing secrets.{provider}.env_var for AI web search")
+    return get_secret(env_var, required=provider_cfg.get("required", False))
+
+
+def _complete_with_web_search(provider: str, model: str, user: str, max_tokens: int) -> str:
+    if provider == "google":
+        api_key = _provider_secret("google")
+        if not api_key:
+            raise RuntimeError("GOOGLE_API_KEY is not configured")
+        payload = {
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {
+                "maxOutputTokens": max_tokens,
+                "responseMimeType": "application/json",
+            },
+        }
+        resp = requests.post(
+            GOOGLE_ENDPOINT.format(model=quote(model, safe="")),
+            params={"key": api_key},
+            json=payload,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        parts = resp.json()["candidates"][0]["content"]["parts"]
+        return "".join(part.get("text", "") for part in parts).strip()
+
+    if provider == "openai":
+        from openai import OpenAI
+
+        client = OpenAI(api_key=_provider_secret("openai"))
+        resp = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user},
+            ],
+            tools=[{"type": "web_search_preview"}],
+            max_output_tokens=max_tokens,
+        )
+        return getattr(resp, "output_text", "").strip()
+
+    if provider == "anthropic":
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=_provider_secret("anthropic"))
+        resp = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user}],
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}],
+        )
+        return "\n".join(
+            getattr(block, "text", "")
+            for block in resp.content
+            if getattr(block, "type", "") == "text"
+        ).strip()
+
+    raise RuntimeError(f"AI web search does not support provider {provider!r}")
+
+
+def _parse_json_array(text: str) -> list[dict[str, Any]]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\[.*\]", text, re.DOTALL)
+        if not match:
+            return []
+        data = json.loads(match.group(0))
+    if isinstance(data, dict):
+        data = data.get("jobs", [])
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _normalize(item: dict[str, Any], source: str, query: str) -> dict[str, str] | None:
+    url = str(item.get("url") or "").strip()
+    title = str(item.get("title") or "").strip()
+    if not url or not title:
+        return None
+    return {
+        "title": title,
+        "company": str(item.get("company") or "").strip(),
+        "location": str(item.get("location") or "").strip(),
+        "url": url,
+        "posted": "",
+        "snippet": str(item.get("snippet") or "").strip(),
+        "source": f"AI web search: {source}",
+        "query": query,
+    }
+
+
+def fetch_ai_web_search_jobs(
+    title_filters: list[str],
+    regions: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
+    config = ai_web_search_config()
+    if not config.get("enabled", False):
+        return []
+    if not title_filters or not regions:
+        return []
+
+    provider, model, max_tokens = _llm_settings()
+    budget = make_budget(config)
+    jobs: list[dict[str, str]] = []
+
+    for region_name, region_config in regions.items():
+        for title in title_filters:
+            for source, query in build_queries(title, region_config, config):
+                remaining = budget.remaining_results(region_name)
+                if remaining <= 0:
+                    logger.info("[ai-web-search] result cap reached for region=%s", region_name)
+                    break
+                if not budget.can_prompt(region_name):
+                    logger.info("[ai-web-search] prompt cap reached for region=%s", region_name)
+                    break
+
+                user = (
+                    f"Query: {query}\n"
+                    f"Return up to {remaining} current job postings as JSON."
+                )
+                try:
+                    budget.record_prompt(region_name)
+                    raw = _complete_with_web_search(provider, model, user, max_tokens)
+                    normalized = [
+                        job
+                        for item in _parse_json_array(raw)
+                        if (job := _normalize(item, source, query))
+                    ][:remaining]
+                except Exception as exc:
+                    logger.warning("[ai-web-search] %s failed for %r: %s", provider, query, exc)
+                    continue
+
+                budget.record_results(region_name, len(normalized))
+                jobs.extend(normalized)
+
+                if budget.results_used >= budget.max_total_results_per_run:
+                    logger.info("[ai-web-search] run result cap reached")
+                    return jobs
+
+    logger.info(
+        "[ai-web-search] complete: prompts=%s results=%s",
+        budget.prompts_used,
+        len(jobs),
+    )
+    return jobs

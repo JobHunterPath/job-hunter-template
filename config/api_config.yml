@@ -13,6 +13,7 @@ llm:
     discovery: anthropic
     linkedin: anthropic
     jd_extraction: anthropic
+    ai_web_search: anthropic
   models:
     # Model names must match the provider configured for each role above.
     # If you switch providers, replace these with model names from that provider.
@@ -23,6 +24,7 @@ llm:
     discovery: "claude-sonnet-4-6"
     linkedin: "claude-sonnet-4-6"
     jd_extraction: "claude-haiku-4-5-20251001"
+    ai_web_search: "claude-haiku-4-5-20251001"  # cheapest: haiku (anthropic), gemini-2.5-flash-lite (google), gpt-4.1-nano (openai)
   max_tokens:
     validation: 200
     scoring: 500
@@ -31,6 +33,7 @@ llm:
     discovery: 400
     linkedin: 3000
     jd_extraction: 1500
+    ai_web_search: 1200
 
 ollama:
   base_url: "http://localhost:11434"
@@ -68,16 +71,39 @@ http:
     timeout_seconds: 15
     results_per_query: 10
   search_providers:
+    max_consecutive_failures: 3
     order:
       - searxng
       - brave
       - tavily
       - exa
     searxng_base_url: "http://127.0.0.1:8080"
+    ai_web_search:
+      enabled: false
+      # Queries are title + region only; company names are never included.
+      max_prompts_per_run: 30
+      max_prompts_per_region: 10
+      max_results_per_prompt: 8
+      max_results_per_region: 30
+      max_total_results_per_run: 60
+      sources:
+        linkedin:
+          enabled: true
+          query_templates:
+            - 'site:linkedin.com/jobs/view "{title}" "{location}"'
+        stepstone:
+          enabled: true
+          query_templates:
+            - 'site:stepstone.de/stellenangebote-- "{title}" "{location}"'
+        generic_web:
+          enabled: true
+          query_templates:
+            - '"{title}" "{location}" careers apply'
   ats_scraper:
     timeout_seconds: 10
   job_boards:
     timeout_seconds: 10
+    max_consecutive_failures: 3
 
 profile:
   # Available resume templates:

@@ -13,7 +13,7 @@ import os
 from dataclasses import dataclass
 from html import unescape
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -53,6 +53,12 @@ JOB_HINTS = (
     "openings", "vacancy", "vacancies",
 )
 
+TRACKING_QUERY_KEYS = {
+    "fbclid", "gclid", "gbraid", "wbraid", "mc_cid", "mc_eid", "igshid",
+}
+TRACKING_QUERY_PREFIXES = ("utm_",)
+_PROVIDER_FAILURES: dict[str, int] = {}
+
 
 @dataclass
 class SearchResult:
@@ -86,6 +92,28 @@ def _with_scheme(url: str) -> str:
     if url.startswith(("http://", "https://")):
         return url
     return f"https://{url}"
+
+
+def canonicalize_url(url: str) -> str:
+    """Normalize URLs for dedupe while preserving meaningful path/query data."""
+    if not url:
+        return ""
+    parsed = urlparse(_with_scheme(url.strip()))
+    scheme = (parsed.scheme or "https").lower()
+    netloc = parsed.netloc.lower()
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    path = parsed.path.rstrip("/") or "/"
+    query_items = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        key_lower = key.lower()
+        if key_lower in TRACKING_QUERY_KEYS:
+            continue
+        if any(key_lower.startswith(prefix) for prefix in TRACKING_QUERY_PREFIXES):
+            continue
+        query_items.append((key, value))
+    query = urlencode(sorted(query_items), doseq=True)
+    return urlunparse((scheme, netloc, path, "", query, ""))
 
 
 def _text(value: object) -> str:
@@ -258,6 +286,22 @@ class SearchRouter:
         order = _search_cfg().get("order") or list(available)
         ordered = [available[name] for name in order if name in available]
         self.providers = providers if providers is not None else ordered
+        self.max_consecutive_failures = int(
+            _search_cfg().get("max_consecutive_failures", 3)
+        )
+
+    def _is_suppressed(self, provider: SearchProvider) -> bool:
+        if self.max_consecutive_failures <= 0:
+            return False
+        failures = _PROVIDER_FAILURES.get(provider.name, 0)
+        if failures < self.max_consecutive_failures:
+            return False
+        logger.warning(
+            "[search] %s skipped after %s consecutive failure(s)",
+            provider.name,
+            failures,
+        )
+        return True
 
     def search(self, query: str, region_config: dict, count: int = 10) -> list[SearchResult]:
         all_results: list[SearchResult] = []
@@ -265,14 +309,25 @@ class SearchRouter:
             if not provider.enabled():
                 logger.debug("[search] %s disabled or missing credentials", provider.name)
                 continue
+            if self._is_suppressed(provider):
+                continue
             try:
                 logger.info("[search] %s: %s", provider.name, query[:80])
                 results = provider.search(query, region_config, count=count)
+                _PROVIDER_FAILURES[provider.name] = 0
                 if results:
                     all_results.extend(results)
                     break
             except Exception as exc:
-                logger.warning("[search] %s failed: %s", provider.name, exc)
+                failures = _PROVIDER_FAILURES.get(provider.name, 0) + 1
+                _PROVIDER_FAILURES[provider.name] = failures
+                logger.warning(
+                    "[search] %s failed (%s/%s): %s",
+                    provider.name,
+                    failures,
+                    self.max_consecutive_failures,
+                    exc,
+                )
         return all_results[:count]
 
 
@@ -320,10 +375,11 @@ def extract_jobs_from_html(
             continue
         if not _location_match(haystack, location):
             continue
-        if url in seen:
+        canonical = canonicalize_url(url)
+        if canonical in seen:
             continue
 
-        seen.add(url)
+        seen.add(canonical)
         jobs.append({
             "title": text or next((t for t in title_filters if t.lower() in haystack.lower()), "Job"),
             "company": company_name,
@@ -422,8 +478,9 @@ def search_career_urls(company_name: str, region_config: dict, count: int = 7) -
     seen = set()
     for query in queries:
         for item in search_web(query, region_config, count=count):
-            if item["url"] in seen:
+            canonical = canonicalize_url(item["url"])
+            if canonical in seen:
                 continue
-            seen.add(item["url"])
+            seen.add(canonical)
             out.append(item)
     return out

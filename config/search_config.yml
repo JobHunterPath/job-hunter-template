@@ -1,6 +1,7 @@
 regions:
   primary:
     enabled: true
+    primary: true
     country: "DE"
     search_lang: "en"
     location: "Berlin"
@@ -28,6 +29,10 @@ job_boards:
     num_pages: 1
 
 exclusion_rules:
+  excluded_url_patterns:
+    - "linkedin\\.com/jobs/search"
+    - "linkedin\\.com/jobs/[^/?#]+-jobs"
+    - "linkedin\\.com/jobs/collections"
   excluded_title_terms:
   - engineer
   - engineering
