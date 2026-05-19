@@ -93,29 +93,31 @@ http:
     ai_web_search:
       enabled: false
       # Queries are title + region only; company names are never included.
-      prompt_delay_seconds: 5         # pause between prompts to avoid overloading the web-search endpoint
-      max_prompts_per_run: 30
-      max_prompts_per_region: 10
+      prompt_delay_seconds: 3         # pause between prompts to avoid overloading the web-search endpoint
+      max_prompts_per_run: 80
+      max_prompts_per_region: 8
       max_results_per_prompt: 8
       max_results_per_region: 30
-      max_total_results_per_run: 60
-      min_confidence: 0.7
+      max_total_results_per_run: 120
+      min_confidence: 0.5
       sources:
-        linkedin:
-          # LinkedIn blocks Google from indexing individual job pages, so this
-          # source only works with Anthropic and OpenAI web-search tools.
-          # Disable it here if using the google provider to avoid empty results.
+        greenhouse:
           enabled: true
           query_templates:
-            - 'site:linkedin.com/jobs/view "{title}" "{location}"'
-        stepstone:
+            - 'site:greenhouse.io "{title}" "{location}"'
+        lever:
           enabled: true
           query_templates:
-            - 'site:stepstone.de/stellenangebote-- "{title}" "{location}"'
+            - 'site:jobs.lever.co "{title}" "{location}"'
+        ashby:
+          enabled: true
+          query_templates:
+            - 'site:jobs.ashbyhq.com "{title}" "{location}"'
         generic_web:
           enabled: true
           query_templates:
-            - '"{title}" "{location}" careers apply'
+            # Exclude aggregators to force individual company career pages and ATS postings.
+            - '"{title}" "{location}" job apply -site:glassdoor.com -site:indeed.com -site:linkedin.com -site:monster.com -site:xing.com -site:stepstone.de'
   ats_scraper:
     timeout_seconds: 10
   jd_enrichment:

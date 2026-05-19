@@ -10,3 +10,6 @@ pytest>=8.0.0
 
 # JS rendering for JS-gated job pages (used by sources/jd_fetcher.py)
 playwright>=1.40.0
+
+# Multi-board job discovery: Indeed and Google Jobs
+python-jobspy>=0.20.0
