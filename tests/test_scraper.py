@@ -35,6 +35,13 @@ CONFIG = {
 COMPANIES = CONFIG['regions']['berlin']['companies']
 
 
+@pytest.fixture(autouse=True)
+def _disable_external_scrape_paths():
+    with patch('sources.scraper.fetch_playwright_career_jobs', return_value=[]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[]):
+        yield
+
+
 def _mock_http(results, status=200):
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
