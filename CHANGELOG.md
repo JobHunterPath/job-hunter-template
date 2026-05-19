@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.2 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `03afede` fix(scorer): increase max_tokens and add robust JSON extraction
+
+
 ## 2.10.1 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.
