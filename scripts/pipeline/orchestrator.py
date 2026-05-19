@@ -240,7 +240,7 @@ def _register_company(job: dict) -> None:
 
 # ── Snippet enrichment ────────────────────────────────────────────────────────
 
-def _enrich_snippets(jobs: list[dict]) -> list[dict]:
+def _enrich_snippets(jobs: list[dict], api_cfg: dict | None = None) -> list[dict]:
     """
     Fetch full JD content for jobs with sparse or missing snippets.
 
@@ -249,16 +249,38 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
     an empty snippet (Playwright listing scraper gets titles only). Enriching
     before validation and scoring significantly improves quality for both cases.
     """
-    sparse = [
-        j for j in jobs
-        if not j.get("snippet")
-        or len(j.get("snippet", "")) < 300
-        or j.get("source", "").startswith("Brave")
-    ]
+    if api_cfg is None:
+        api_cfg = load_api_config()
+
+    enrich_cfg = api_cfg.get("http", {}).get("jd_enrichment", {}) or {}
+    max_workers = int(enrich_cfg.get("max_workers", 5))
+    skip_patterns = enrich_cfg.get("skip_url_patterns", []) or []
+
+    def _should_skip_enrichment(url: str) -> bool:
+        return any(re.search(pattern, url, re.IGNORECASE) for pattern in skip_patterns)
+
+    sparse = []
+    skipped = 0
+    for job in jobs:
+        needs_enrichment = (
+            not job.get("snippet")
+            or len(job.get("snippet", "")) < 300
+            or job.get("source", "").startswith("Brave")
+        )
+        if not needs_enrichment:
+            continue
+        if _should_skip_enrichment(job.get("url", "")):
+            skipped += 1
+            continue
+        sparse.append(job)
     if not sparse:
+        if skipped:
+            logger.info("[pipeline] Skipped enrichment for %s throttled URL(s)", skipped)
         return jobs
 
     logger.info(f"[pipeline] Enriching {len(sparse)} job(s) with sparse snippets...")
+    if skipped:
+        logger.info("[pipeline] Skipped enrichment for %s throttled URL(s)", skipped)
     enriched: dict[str, dict] = {}
 
     def _fetch_one(job: dict) -> None:
@@ -270,7 +292,7 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
         else:
             logger.warning(f"    -> enrichment failed, keeping original snippet")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         list(executor.map(_fetch_one, sparse))
 
     return [enriched.get(j["url"], j) for j in jobs]
@@ -487,7 +509,7 @@ def run(args: argparse.Namespace) -> int:
             return 0
 
         logger.info("[pipeline] Step 1b: Enriching sparse job descriptions...")
-        jobs = _enrich_snippets(jobs)
+        jobs = _enrich_snippets(jobs, api_cfg)
 
     else:  # tailor-links
         raw_links = args.links or os.environ.get("TAILOR_LINKS", "")

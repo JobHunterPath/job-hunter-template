@@ -105,6 +105,11 @@ GitHub Actions starts SearXNG temporarily for each hunt, discovery, and
 tailor-links job. If SearXNG or any API provider fails, the pipeline continues
 with the next available option.
 
+**JD enrichment:** `http.jd_enrichment` controls best-effort fetching of full job
+descriptions for sparse search snippets. LinkedIn job pages often return HTTP
+429 to direct fetches, so `linkedin\.com/jobs/` is skipped by default and the
+pipeline keeps the search snippet.
+
 AI web search can be enabled in `config/api_config.yml` to search job titles by
 region through an LLM provider's web-search tool. It never searches by company
 name, and it stops at strict per-run caps before the rest of the pipeline
@@ -128,6 +133,7 @@ http:
       max_results_per_prompt: 8
       max_results_per_region: 30
       max_total_results_per_run: 60
+      min_confidence: 0.7
 ```
 
 Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
@@ -138,6 +144,11 @@ Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
 LinkedIn and StepStone URLs discovered by AI web search still pass through the
 normal dedupe, URL verification, JD fetching, validation, and scoring gates
 before any tailoring or cover-letter generation happens.
+
+AI web search includes compact exclusion rules from `config/search_config.yml`
+in each prompt and filters low-confidence results, source-specific listing/search
+pages, stale snippets, and application-shell titles such as `Applying to ...`
+before they can spend validation or scoring tokens.
 
 **Parallelism:** company scraping, validation, and scoring all run concurrently.
 `llm.max_workers` (default `5`) controls concurrent LLM calls. For Google free

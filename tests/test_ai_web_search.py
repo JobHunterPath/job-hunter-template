@@ -79,7 +79,7 @@ def test_fetch_ai_web_search_jobs_respects_caps_and_normalizes(monkeypatch):
         "title": "Product Owner AI",
         "company": "OtherCo",
         "location": "Berlin",
-        "url": "https://www.stepstone.de/stellenangebote--Product-Owner-AI-Berlin-OtherCo--123-inline.html",
+        "url": "https://www.linkedin.com/jobs/view/456",
         "source": "stepstone",
         "snippet": "AI product role",
         "confidence": 0.8
@@ -89,6 +89,7 @@ def test_fetch_ai_web_search_jobs_respects_caps_and_normalizes(monkeypatch):
     calls = []
 
     monkeypatch.setattr(ai_web_search, "ai_web_search_config", lambda: config)
+    monkeypatch.setattr(ai_web_search, "_load_search_config", lambda: {})
     monkeypatch.setattr(ai_web_search, "_llm_settings", lambda: ("anthropic", "cheap-model", 500))
 
     def fake_complete(provider, model, user, max_tokens):
@@ -104,5 +105,111 @@ def test_fetch_ai_web_search_jobs_respects_caps_and_normalizes(monkeypatch):
 
     assert len(jobs) == 2
     assert len(calls) == 1
+    assert "Filtering rules from search_config.yml" in calls[0]
+    assert "Required title families: Product Owner" in calls[0]
+    assert "Target location/region: Berlin" in calls[0]
     assert jobs[0]["source"] == "AI web search: linkedin"
     assert jobs[0]["query"] == 'site:linkedin.com/jobs/view "Product Owner" "Berlin"'
+
+
+def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
+    config = {
+        "enabled": True,
+        "max_prompts_per_run": 1,
+        "max_prompts_per_region": 1,
+        "max_results_per_prompt": 6,
+        "max_results_per_region": 6,
+        "max_total_results_per_run": 6,
+        "min_confidence": 0.7,
+        "sources": {
+            "linkedin": {
+                "enabled": True,
+                "query_templates": ['site:linkedin.com/jobs/view "{title}" "{location}"'],
+            }
+        },
+    }
+    raw = """
+    [
+      {
+        "title": "Product Owner",
+        "company": "LiveCo",
+        "location": "Berlin",
+        "url": "https://www.linkedin.com/jobs/view/123456",
+        "snippet": "Open product owner role",
+        "confidence": 0.9
+      },
+      {
+        "title": "Applying to Product Owner",
+        "company": "ApplyCo",
+        "location": "Berlin",
+        "url": "https://www.linkedin.com/jobs/view/234567",
+        "snippet": "Application shell",
+        "confidence": 0.9
+      },
+      {
+        "title": "Product Owner",
+        "company": "SearchCo",
+        "location": "Berlin",
+        "url": "https://www.linkedin.com/jobs/search?keywords=Product%20Owner",
+        "snippet": "Search results page",
+        "confidence": 0.9
+      },
+      {
+        "title": "Product Owner",
+        "company": "ClosedCo",
+        "location": "Berlin",
+        "url": "https://www.linkedin.com/jobs/view/345678",
+        "snippet": "This job is no longer available",
+        "confidence": 0.9
+      },
+      {
+        "title": "Product Owner",
+        "company": "WeakCo",
+        "location": "Berlin",
+        "url": "https://www.linkedin.com/jobs/view/567890",
+        "snippet": "Maybe a product role",
+        "confidence": 0.4
+      }
+    ]
+    """
+
+    monkeypatch.setattr(ai_web_search, "ai_web_search_config", lambda: config)
+    monkeypatch.setattr(
+        ai_web_search,
+        "_load_search_config",
+        lambda: {"exclusion_rules": {"stale_indicators": ["no longer available"]}},
+    )
+    monkeypatch.setattr(ai_web_search, "_llm_settings", lambda: ("anthropic", "cheap-model", 500))
+    monkeypatch.setattr(ai_web_search, "_complete_with_web_search", lambda *args: raw)
+
+    jobs = ai_web_search.fetch_ai_web_search_jobs(
+        ["Product Owner"],
+        {"berlin": {"location": "Berlin"}},
+    )
+
+    assert [job["company"] for job in jobs] == ["LiveCo"]
+
+
+def test_build_rule_context_includes_compact_search_config_rules():
+    context = ai_web_search.build_rule_context(
+        {
+            "excluded_companies": ["N26"],
+            "exclusion_rules": {
+                "excluded_title_terms": ["engineer"],
+                "senior_flags": ["director"],
+                "stale_indicators": ["no longer available"],
+                "german_indicators": ["m/w/d"],
+                "excluded_industries": ["banking"],
+                "excluded_url_patterns": [r"linkedin\.com/jobs/search"],
+            },
+        },
+        ["Product Owner"],
+        {"location": "Berlin"},
+    )
+
+    assert "Required title families: Product Owner" in context
+    assert "Target location/region: Berlin" in context
+    assert "Reject excluded companies: N26" in context
+    assert "Reject excluded title terms: engineer" in context
+    assert "Reject seniority flags: director" in context
+    assert "Reject stale/closed indicators: no longer available" in context

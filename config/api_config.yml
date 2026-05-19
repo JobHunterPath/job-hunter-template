@@ -99,6 +99,7 @@ http:
       max_results_per_prompt: 8
       max_results_per_region: 30
       max_total_results_per_run: 60
+      min_confidence: 0.7
       sources:
         linkedin:
           # LinkedIn blocks Google from indexing individual job pages, so this
@@ -117,6 +118,12 @@ http:
             - '"{title}" "{location}" careers apply'
   ats_scraper:
     timeout_seconds: 10
+  jd_enrichment:
+    # Full JD fetching is best-effort. Some hosts, especially LinkedIn, throttle
+    # direct scraping aggressively; keep their search snippets instead.
+    max_workers: 5
+    skip_url_patterns:
+      - 'linkedin\.com/jobs/'
   job_boards:
     timeout_seconds: 10
     max_consecutive_failures: 3
