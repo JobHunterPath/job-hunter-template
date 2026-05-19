@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.4 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `2fa2427` merge: integrate latest job results
+
+
 ## 2.11.3 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

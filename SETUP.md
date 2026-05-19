@@ -654,6 +654,11 @@ Optional search-provider secrets:
 
 The pipeline can still use direct ATS scraping, HTTP scraping, Playwright, and
 temporary SearXNG in GitHub Actions when optional search keys are missing.
+Broad ATS discovery also uses this chain in order, so SearXNG is tried before
+Brave/Tavily/Exa when looking for individual Greenhouse, Lever, Ashby,
+SmartRecruiters, Workable, Personio, Recruitee, and HiBob posting URLs.
+Candidate URLs already seen from broad discovery are persisted in
+`config/discovery_cache.yml`.
 
 ### Optional: Enable AI Web Search
 
@@ -688,10 +693,11 @@ http:
       min_confidence: 0.5
 ```
 
-The default sources (`greenhouse`, `lever`, `ashby`, `generic_web`) target
-well-indexed ATS boards and exclude aggregators. Every result still goes through
-dedupe, URL verification, JD fetching, validation, and scoring before any
-tailoring or cover-letter generation.
+The default sources (`greenhouse`, `lever`, `ashby`, `smartrecruiters`,
+`workable`, `personio`, `recruitee`, `hibob`, `generic_web`) target well-indexed
+ATS boards and exclude aggregators. Every result still goes through dedupe, URL
+verification, JD fetching, validation, and scoring before any tailoring or
+cover-letter generation.
 
 ### Optional: Enable JobSpy (Indeed + Google Jobs)
 

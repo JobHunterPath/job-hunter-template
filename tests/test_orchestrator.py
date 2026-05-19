@@ -78,6 +78,38 @@ def test_hunt_no_new_jobs_is_successful_empty_run():
     assert code == 0
 
 
+def test_update_readme_includes_location_and_migrates_existing_rows(tmp_path):
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "\n".join([
+            "<!-- JOBS_TABLE_START -->",
+            "| Date | Job | Score | Files |",
+            "|---|---|---|---|",
+            "| 2026-05-01 | [Old PM @ OldCo](https://example.com/old) | 72 | [Files](jobs/old/) |",
+            "<!-- JOBS_TABLE_END -->",
+        ]),
+        encoding="utf-8",
+    )
+    match = {
+        "score": 88,
+        "job": {
+            "title": "Product | Manager",
+            "company": "TestCo",
+            "location": "Dublin, Ireland",
+            "url": "https://example.com/jobs/pm",
+        },
+    }
+
+    with patch("pipeline.orchestrator.ROOT", str(tmp_path)), \
+         patch("pipeline.orchestrator.TODAY", "2026-05-19"):
+        orchestrator.update_readme([match])
+
+    content = readme.read_text(encoding="utf-8")
+    assert "| Date | Job | Location | Score | Files |" in content
+    assert "| 2026-05-19 | [Product \\| Manager @ TestCo](https://example.com/jobs/pm) | Dublin, Ireland | 88 |" in content
+    assert "| 2026-05-01 | [Old PM @ OldCo](https://example.com/old) | Unknown | 72 |" in content
+
+
 def test_enrich_snippets_skips_configured_throttled_urls():
     jobs = [
         {

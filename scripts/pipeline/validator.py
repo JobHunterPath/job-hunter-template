@@ -84,11 +84,12 @@ def validate(
         with counter_lock:
             counter += 1
             display_idx = counter
-        logger.info(f"[validate] [{display_idx}/{len(jobs)}] {label}")
+        prefix = f"[validate] [{display_idx}/{len(jobs)}] {label}"
+        logger.info(prefix)
 
         # 1 -- URL reachability
         if check_urls and url and not url_is_alive(url, url_timeout):
-            logger.info(f"  x dead URL: {url[:80]}")
+            logger.info(f"{prefix}: dead URL: {url[:80]}")
             with results_lock:
                 results.append((idx_orig, "rejected", {**job, "_rejection_reason": "dead_url"}))
             return
@@ -117,24 +118,24 @@ def validate(
 
             if not result.get("is_active", True):
                 reason = result.get("reason", "inactive")
-                logger.info(f"  x inactive: {reason}")
+                logger.info(f"{prefix}: inactive: {reason}")
                 with results_lock:
                     results.append((idx_orig, "rejected", {**job, "_rejection_reason": reason}))
                 return
 
             if result.get("over_experience", False):
                 reason = result.get("reason", "over_experience")
-                logger.info(f"  x over experience limit: {reason}")
+                logger.info(f"{prefix}: over experience limit: {reason}")
                 with results_lock:
                     results.append((idx_orig, "rejected", {**job, "_rejection_reason": reason}))
                 return
 
-            logger.info("  v valid")
+            logger.info(f"{prefix}: valid")
             with results_lock:
                 results.append((idx_orig, "valid", job))
 
         except Exception as e:
-            logger.warning(f"  ! validation error ({e}) -- passing through")
+            logger.warning(f"{prefix}: validation error ({e}) -- passing through")
             with results_lock:
                 results.append((idx_orig, "valid", job))
 

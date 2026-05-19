@@ -60,7 +60,7 @@ def slugify(text: str) -> str:
 
 TABLE_START = "<!-- JOBS_TABLE_START -->"
 TABLE_END = "<!-- JOBS_TABLE_END -->"
-TABLE_HEADER = "| Date | Job | Score | Files |\n|---|---|---|---|"
+TABLE_HEADER = "| Date | Job | Location | Score | Files |\n|---|---|---|---|---|"
 
 
 def _parse_urls(raw: str) -> list[str]:
@@ -93,8 +93,43 @@ def _parse_existing_rows(table_body: str) -> dict[str, str]:
             continue
         url_match = re.search(r"\]\((https?://[^)]+)\)", line)
         if url_match:
-            rows[url_match.group(1)] = line
+            rows[url_match.group(1)] = _ensure_location_column(line)
     return rows
+
+
+def _ensure_location_column(row: str) -> str:
+    try:
+        left, files_tail = row.rsplit(" | [Files](", 1)
+        before_score, score = left.rsplit(" | ", 1)
+    except ValueError:
+        return row
+
+    before_score = _escape_link_text_pipes(before_score)
+    link_end = before_score.rfind(")")
+    has_location = link_end != -1 and before_score[link_end + 1 :].strip().startswith("|")
+    if not has_location:
+        return f"{before_score} | Unknown | {score} | [Files]({files_tail}"
+    return f"{before_score} | {score} | [Files]({files_tail}"
+
+
+def _escape_table_cell(value: object) -> str:
+    return str(value or "Unknown").replace("\n", " ").replace("|", r"\|")
+
+
+def _escape_link_text_pipes(value: str) -> str:
+    def _replace(match: re.Match) -> str:
+        text = match.group(1).replace("|", r"\|")
+        return f"[{text}]({match.group(2)})"
+
+    return re.sub(
+        r"\[([^\]]*)\]\((https?://[^)]+)\)",
+        _replace,
+        value,
+    )
+
+
+def _job_location(job: dict) -> str:
+    return _escape_table_cell(job.get("location") or job.get("region") or "Unknown")
 
 
 def update_readme(matches: List[dict]) -> None:
@@ -114,8 +149,9 @@ def update_readme(matches: List[dict]) -> None:
             if job["url"] in existing_rows:
                 continue
             slug = f"{TODAY}_{slugify(job['company'])}_{slugify(job['title'])}"
+            label = _escape_table_cell(f"{job['title']} @ {job['company']}")
             existing_rows[job["url"]] = (
-                f"| {TODAY} | [{job['title']} @ {job['company']}]({job['url']})"
+                f"| {TODAY} | [{label}]({job['url']}) | {_job_location(job)}"
                 f" | {m['score']} | [Files](jobs/{slug}/) |"
             )
         all_rows = sorted(existing_rows.values(), reverse=True)
@@ -342,6 +378,7 @@ def _process_match(match: dict) -> bool:
         "title": job["title"],
         "company": job["company"],
         "url": job["url"],
+        "location": job.get("location", ""),
         "posted": job.get("posted", ""),
         "score": match["score"],
         "matched_keywords": match.get("matched_keywords", []),
@@ -352,6 +389,7 @@ def _process_match(match: dict) -> bool:
     (job_dir / "jd.md").write_text(
         f"# {job['title']} @ {job['company']}\n\n"
         f"**URL:** {job['url']}\n\n"
+        f"**Location:** {job.get('location', 'Unknown')}\n\n"
         f"**Posted:** {job.get('posted', 'Unknown')}\n\n"
         f"{job['snippet']}",
         encoding="utf-8",

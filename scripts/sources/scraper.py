@@ -28,10 +28,12 @@ from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
 from sources.search_providers import (
     BraveProvider,
     canonicalize_url,
+    discover_ats_jobs_by_search,
     fetch_playwright_career_jobs,
     fetch_static_career_jobs,
     search_web,
 )
+from tracking.discovery_cache import load_cached_candidate_urls, save_cached_candidate_urls
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
@@ -185,15 +187,30 @@ def brave_search(query: str, region_config: dict, count: Optional[int] = None) -
     ]
 
 
-def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str], lock: Optional[threading.Lock] = None):
+def _make_filter(
+    config: dict,
+    seen_urls: set[str],
+    results: list[dict],
+    title_filters: list[str],
+    lock: Optional[threading.Lock] = None,
+    cached_candidate_urls: Optional[set[str]] = None,
+    candidate_cache_updates: Optional[set[str]] = None,
+):
     excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
     _lock = lock or threading.Lock()
+    cached_candidate_urls = cached_candidate_urls if cached_candidate_urls is not None else set()
+    candidate_cache_updates = candidate_cache_updates if candidate_cache_updates is not None else set()
 
-    def add_job(job: dict, allow_excluded_urls: bool = False) -> bool:
+    def add_job(job: dict, allow_excluded_urls: bool = False, cache_candidate: bool = False) -> bool:
         url = job.get("url", "")
         canonical_url = canonicalize_url(url)
         if not url:
             return False
+        if cache_candidate:
+            if canonical_url in cached_candidate_urls:
+                logger.debug("[skip] Cached discovery candidate: %s", url[:80])
+                return False
+            candidate_cache_updates.add(canonical_url)
         # All filtering before the lock (no shared state needed)
         if not allow_excluded_urls and is_excluded_url(url, config):
             logger.debug("[skip] Excluded URL pattern: %s", url[:80])
@@ -248,20 +265,18 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
     results: list[dict] = []
     seen_urls: set[str] = set()
+    cached_candidate_urls = load_cached_candidate_urls()
+    candidate_cache_updates: set[str] = set()
     lock = threading.Lock()
-    add_job = _make_filter(config, seen_urls, results, title_filters, lock)
-
-    try:
-        for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
-            add_job(job, allow_excluded_urls=True)
-    except Exception as e:
-        logger.warning("[scraper] AI web search failed: %s", e)
-
-    try:
-        for job in fetch_jobspy_jobs(title_filters, enabled_regions, config):
-            add_job(job)
-    except Exception as e:
-        logger.warning("[scraper] JobSpy failed: %s", e)
+    add_job = _make_filter(
+        config,
+        seen_urls,
+        results,
+        title_filters,
+        lock,
+        cached_candidate_urls,
+        candidate_cache_updates,
+    )
 
     if not companies:
         logger.warning("[scraper] No companies to scrape. Check search_config.yml")
@@ -364,6 +379,18 @@ def scrape(region: Optional[str] = None) -> list[dict]:
         except TimeoutError:
             logger.warning("[scraper] Company scraping hit %ss total timeout, proceeding with partial results", total_scrape_timeout)
 
+    try:
+        for job in discover_ats_jobs_by_search(title_filters, enabled_regions, excluded_title_terms):
+            add_job(job, cache_candidate=True)
+    except Exception as e:
+        logger.warning("[scraper] ATS search discovery failed: %s", e)
+
+    try:
+        for job in fetch_jobspy_jobs(title_filters, enabled_regions, config):
+            add_job(job, cache_candidate=True)
+    except Exception as e:
+        logger.warning("[scraper] JobSpy failed: %s", e)
+
     boards_cfg = config.get("job_boards", {})
 
     for region_name, region_config in enabled_regions.items():
@@ -403,7 +430,16 @@ def scrape(region: Optional[str] = None) -> list[dict]:
             ):
                 add_job(job)
 
+    try:
+        for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
+            add_job(job, allow_excluded_urls=True, cache_candidate=True)
+    except Exception as e:
+        logger.warning("[scraper] AI web search failed: %s", e)
+
     logger.info("[scraper] Complete: %s jobs found", len(results))
+    if candidate_cache_updates:
+        save_cached_candidate_urls(cached_candidate_urls | candidate_cache_updates)
+        logger.info("[scraper] Cached %s new discovery candidate URL(s)", len(candidate_cache_updates))
     return results
 
 

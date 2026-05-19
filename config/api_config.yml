@@ -90,6 +90,18 @@ http:
       - tavily
       - exa
     searxng_base_url: "http://127.0.0.1:8080"
+    ats_discovery:
+      enabled: true
+      results_per_query: 10
+      sources:
+        - greenhouse
+        - lever
+        - ashby
+        - smartrecruiters
+        - workable
+        - personio
+        - recruitee
+        - hibob
     ai_web_search:
       enabled: false
       # Queries are title + region only; company names are never included.
@@ -113,6 +125,26 @@ http:
           enabled: true
           query_templates:
             - 'site:jobs.ashbyhq.com "{title}" "{location}"'
+        smartrecruiters:
+          enabled: true
+          query_templates:
+            - 'site:jobs.smartrecruiters.com "{title}" "{location}"'
+        workable:
+          enabled: true
+          query_templates:
+            - 'site:apply.workable.com "{title}" "{location}"'
+        personio:
+          enabled: true
+          query_templates:
+            - '(site:jobs.personio.de OR site:jobs.personio.com) "{title}" "{location}"'
+        recruitee:
+          enabled: true
+          query_templates:
+            - 'site:recruitee.com "{title}" "{location}"'
+        hibob:
+          enabled: true
+          query_templates:
+            - 'site:careers.hibob.com/jobs "{title}" "{location}"'
         generic_web:
           enabled: true
           query_templates:
