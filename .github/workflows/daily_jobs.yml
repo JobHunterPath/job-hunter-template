@@ -2,26 +2,19 @@ name: Job Hunt Pipeline
 
 on:
   schedule:
-    # Daily job hunt region slots, Mon-Fri Europe/Berlin local time.
-    # Slot 0 starts at 06:00 Berlin time, slot 1 at 07:00, etc. GitHub
-    # cron is UTC-only, so this UTC window covers Berlin summer/winter time;
-    # the resolver maps the scheduled UTC hour to Berlin time and skips UTC
-    # runs outside the intended Berlin slots. Extra cron entries are harmless:
-    # if a repo has fewer enabled regions, those slots stop before the pipeline.
+    # Daily job hunt slots. Slot 0 is the primary region and runs every weekday.
+    # Secondary regions run on Monday/Wednesday/Friday only. Keep one hunt cron
+    # per configured region slot; discovery has its own separate Monday cron.
     - cron: '0 4 * * 1-5'
-    - cron: '0 5 * * 1-5'
-    - cron: '0 6 * * 1-5'
-    - cron: '0 7 * * 1-5'
-    - cron: '0 8 * * 1-5'
-    - cron: '0 9 * * 1-5'
-    - cron: '0 10 * * 1-5'
-    - cron: '0 11 * * 1-5'
-    - cron: '0 12 * * 1-5'
-    - cron: '0 13 * * 1-5'
-    - cron: '0 14 * * 1-5'
-    - cron: '0 15 * * 1-5'
-    - cron: '0 16 * * 1-5'
-    - cron: '0 17 * * 1-5'
+    - cron: '0 5 * * 1,3,5'
+    - cron: '0 6 * * 1,3,5'
+    - cron: '0 7 * * 1,3,5'
+    - cron: '0 8 * * 1,3,5'
+    - cron: '0 9 * * 1,3,5'
+    - cron: '0 10 * * 1,3,5'
+    - cron: '0 11 * * 1,3,5'
+    - cron: '0 12 * * 1,3,5'
+    - cron: '0 13 * * 1,3,5'
     - cron: '0 18 * * 1'     # company discovery Mondays 18:00 UTC
   workflow_dispatch:
     inputs:
@@ -71,112 +64,18 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SCHEDULE: ${{ github.event.schedule || '' }}
           INPUT_REGION: ${{ github.event.inputs.region || 'all' }}
-        run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import calendar
-          from datetime import datetime, timedelta, timezone
-          import os
-          import sys
-          import yaml
-
-          def _last_sunday(year, month):
-              day = calendar.monthrange(year, month)[1]
-              while datetime(year, month, day).weekday() != 6:
-                  day -= 1
-              return day
-
-          def _berlin_offset_hours(utc_dt):
-              start = datetime(
-                  utc_dt.year,
-                  3,
-                  _last_sunday(utc_dt.year, 3),
-                  1,
-                  tzinfo=timezone.utc,
-              )
-              end = datetime(
-                  utc_dt.year,
-                  10,
-                  _last_sunday(utc_dt.year, 10),
-                  1,
-                  tzinfo=timezone.utc,
-              )
-              return 2 if start <= utc_dt < end else 1
-
-          with open("config/search_config.yml", encoding="utf-8") as f:
-              cfg = yaml.safe_load(f) or {}
-
-          regions = [
-              name for name, region in (cfg.get("regions") or {}).items()
-              if region.get("enabled", True)
-          ]
-
-          event_name = os.environ.get("EVENT_NAME", "")
-          schedule = os.environ.get("EVENT_SCHEDULE", "")
-          requested = (os.environ.get("INPUT_REGION") or "all").strip()
-
-          if event_name == "schedule":
-              try:
-                  scheduled_hour = int(schedule.split()[1])
-              except Exception:
-                  print("should_run=false")
-                  print(f"reason=Could not resolve scheduled hour from {schedule!r}")
-                  sys.exit(0)
-
-              now_utc = datetime.now(timezone.utc)
-              scheduled_utc = now_utc.replace(
-                  hour=scheduled_hour,
-                  minute=0,
-                  second=0,
-                  microsecond=0,
-              )
-              scheduled_berlin = scheduled_utc + timedelta(
-                  hours=_berlin_offset_hours(scheduled_utc)
-              )
-              slot = scheduled_berlin.hour - 6
-              if slot < 0 or slot >= len(regions):
-                  print("should_run=false")
-                  print(
-                      "reason="
-                      f"No enabled region configured for Berlin slot {slot} "
-                      f"(scheduled Berlin time {scheduled_berlin:%Y-%m-%d %H:%M})"
-                  )
-                  sys.exit(0)
-
-              region = regions[slot]
-              print("should_run=true")
-              print(f"region={region}")
-              print(f"arg=--region {region}")
-              print(f"label={region}")
-              print(f"berlin_time={scheduled_berlin:%Y-%m-%d %H:%M}")
-              sys.exit(0)
-
-          if requested.lower() in {"", "all", "*"}:
-              print("should_run=true")
-              print("region=")
-              print("arg=")
-              print("label=all")
-              sys.exit(0)
-
-          if requested.lower() == "scheduled":
-              print("should_run=true")
-              print("region=")
-              print("arg=")
-              print("label=all")
-              sys.exit(0)
-
-          if requested not in regions:
-              print(
-                  f"::error::Unknown or disabled region '{requested}'. "
-                  f"Enabled regions: {', '.join(regions) or '(none)'}",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-
-          print("should_run=true")
-          print(f"region={requested}")
-          print(f"arg=--region {requested}")
-          print(f"label={requested}")
-          PY
+          HUNT_SCHEDULES: |
+            0 4 * * 1-5
+            0 5 * * 1,3,5
+            0 6 * * 1,3,5
+            0 7 * * 1,3,5
+            0 8 * * 1,3,5
+            0 9 * * 1,3,5
+            0 10 * * 1,3,5
+            0 11 * * 1,3,5
+            0 12 * * 1,3,5
+            0 13 * * 1,3,5
+        run: python scripts/pipeline/resolve_hunt_region.py >> "$GITHUB_OUTPUT"
 
       - name: Skip empty region slot
         if: steps.hunt_region.outputs.should_run != 'true'
@@ -344,18 +243,39 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
+      - name: Resolve prebuilt runner image
+        id: runner_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/job-hunt-runner:latest"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Using prebuilt runner image: $image"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+          fi
+
       - name: Set up Python
+        if: steps.runner_image.outputs.available != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Cache pip
+        if: steps.runner_image.outputs.available != 'true'
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('requirements.txt') }}
 
       - name: Install Python dependencies
+        if: steps.runner_image.outputs.available != 'true'
         run: pip install -r requirements.txt
 
       - name: Start SearXNG
@@ -380,7 +300,37 @@ jobs:
           echo "SearXNG did not become ready; continuing with other providers"
           docker logs searxng || true
 
-      - name: Discover new companies
+      - name: Discover new companies in prebuilt runner image
+        if: steps.runner_image.outputs.available == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          SEARXNG_BASE_URL: http://127.0.0.1:8080
+          LOG_LEVEL: INFO
+          RUNNER_IMAGE: ${{ steps.runner_image.outputs.image }}
+        run: |
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e ANTHROPIC_API_KEY \
+            -e OPENAI_API_KEY \
+            -e GOOGLE_API_KEY \
+            -e BRAVE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e EXA_API_KEY \
+            -e SEARXNG_BASE_URL \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            bash -lc 'PYTHONPATH=/workspace/scripts python scripts/discovery/discoverer.py'
+
+      - name: Discover new companies natively
+        if: steps.runner_image.outputs.available != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

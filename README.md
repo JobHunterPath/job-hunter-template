@@ -2,9 +2,9 @@
 
 This repository automates job discovery across multiple locations, fit scoring, resume tailoring, cover
 letter generation, and PDF output for a configurable job search. The scraper
-uses direct ATS APIs first, then HTTP/BeautifulSoup, Playwright, an ephemeral
-SearXNG container in GitHub Actions, and optional search APIs such as Brave,
-Tavily, and Exa.
+uses optional AI web search by job title and region, direct ATS APIs,
+HTTP/BeautifulSoup, Playwright, an ephemeral SearXNG container in GitHub
+Actions, and optional search APIs such as Brave, Tavily, and Exa.
 
 It also includes a lightweight LinkedIn content and networking system. The
 LinkedIn workflow generates public-safe post ideas from your private story bank,
@@ -59,13 +59,12 @@ installing LaTeX on every job run. New repos build this repo-scoped image:
 8. Run the preflight checklist, commit, and push before starting GitHub Actions.
 9. Configure `linkedin/config.yml` if you want LinkedIn ideas, drafts, and networking suggestions.
 
-Scheduled GitHub hunts run enabled regions one hour apart, starting at
-06:00 Europe/Berlin time on weekdays. The first enabled region in
-`config/search_config.yml` runs first, the second enabled region runs one hour
-later, and so on. Extra cron slots exit before the pipeline starts, so a repo
-with one enabled region only runs the first slot. Manual **Job Hunt Pipeline**
-runs include a `region` field where you can enter `all` or a specific region
-key from `config/search_config.yml`.
+Scheduled GitHub hunts run the primary enabled region every weekday. Secondary
+enabled regions run Monday, Wednesday, and Friday. Cron slots are mapped to
+enabled regions with companies in `config/search_config.yml`; empty slots exit
+before the expensive pipeline steps. Manual **Job Hunt Pipeline** runs include a
+`region` field where you can enter `all` or a specific region key from
+`config/search_config.yml`.
 
 **Project section tailoring:** When your resume contains an uncommented
 Projects section, the tailorer selects and adjusts project content from your
@@ -105,6 +104,37 @@ http:
 GitHub Actions starts SearXNG temporarily for each hunt, discovery, and
 tailor-links job. If SearXNG or any API provider fails, the pipeline continues
 with the next available option.
+
+AI web search can be enabled in `config/api_config.yml` to search job titles by
+region through an LLM provider's web-search tool. It never searches by company
+name, and it stops at strict per-run caps before the rest of the pipeline
+continues.
+
+```yaml
+llm:
+  providers:
+    ai_web_search: anthropic
+  models:
+    ai_web_search: "claude-haiku-4-5-20251001"
+  max_tokens:
+    ai_web_search: 1200
+
+http:
+  search_providers:
+    ai_web_search:
+      enabled: false
+      max_prompts_per_run: 30
+      max_prompts_per_region: 10
+      max_results_per_prompt: 8
+      max_results_per_region: 30
+      max_total_results_per_run: 60
+```
+
+Recommended low-cost model choices are `gemini-2.5-flash-lite` for Google,
+`gpt-5.4-nano` for OpenAI, and `claude-haiku-4-5-20251001` for Anthropic.
+LinkedIn and StepStone URLs discovered by AI web search still pass through the
+normal dedupe, URL verification, JD fetching, validation, and scoring gates
+before any tailoring or cover-letter generation happens.
 
 ## Local Run
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.0 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `28eda92` feat: add AI web search, URL deduplication, and provider circuit breaker
+
+
 ## 2.8.6 - 2026-05-18
 
 - Synced reusable template updates from the private source repository.

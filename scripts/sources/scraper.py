@@ -10,6 +10,7 @@ The fallback order is intentionally conservative:
 import json
 import logging
 import os
+import re
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -19,9 +20,11 @@ import yaml
 from core.config import RAPIDAPI_KEY
 from core.utils import title_matches
 from sources.ats import fetch_ats_jobs
+from sources.ai_web_search import fetch_ai_web_search_jobs
 from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
 from sources.search_providers import (
     BraveProvider,
+    canonicalize_url,
     fetch_playwright_career_jobs,
     fetch_static_career_jobs,
     search_web,
@@ -131,6 +134,12 @@ def is_valid_job_url(url: str) -> bool:
     return len(segments) >= 2
 
 
+def is_excluded_url(url: str, config: dict) -> bool:
+    """Return True when caller-configured URL patterns identify non-posting pages."""
+    patterns = config.get("exclusion_rules", {}).get("excluded_url_patterns", [])
+    return any(re.search(pattern, url, re.IGNORECASE) for pattern in patterns)
+
+
 def is_stale_posting(title: str, snippet: str, config: dict) -> bool:
     combined = (title + " " + snippet).lower()
     stale_indicators = config.get("exclusion_rules", {}).get("stale_indicators", [])
@@ -176,8 +185,13 @@ def brave_search(query: str, region_config: dict, count: Optional[int] = None) -
 def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str]):
     excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
 
-    def add_job(job: dict) -> bool:
-        if not job.get("url") or job["url"] in seen_urls:
+    def add_job(job: dict, allow_excluded_urls: bool = False) -> bool:
+        url = job.get("url", "")
+        canonical_url = canonicalize_url(url)
+        if not url or canonical_url in seen_urls:
+            return False
+        if not allow_excluded_urls and is_excluded_url(url, config):
+            logger.debug("[skip] Excluded URL pattern: %s", url[:80])
             return False
         if title_filters and not title_matches(job.get("title", ""), title_filters, excluded_title_terms):
             logger.debug("[skip] Title not in filters: %s", job.get("title", "")[:60])
@@ -192,7 +206,7 @@ def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_f
             logger.debug("[skip] Excluded industry: %s", job.get("title", "")[:60])
             return False
 
-        seen_urls.add(job["url"])
+        seen_urls.add(canonical_url)
         results.append(job)
         logger.info(
             "[found] %s @ %s [%s]",
@@ -209,10 +223,6 @@ def scrape(region: Optional[str] = None) -> list[dict]:
     """Scrape jobs for configured companies and global boards."""
     config = load_search_config()
     companies = load_companies(region)
-
-    if not companies:
-        logger.warning("[scraper] No companies to scrape. Check search_config.yml")
-        return []
 
     global_cfg = config.get("global_search", {})
     title_filters = global_cfg.get("job_titles", [])
@@ -231,6 +241,15 @@ def scrape(region: Optional[str] = None) -> list[dict]:
     results: list[dict] = []
     seen_urls: set[str] = set()
     add_job = _make_filter(config, seen_urls, results, title_filters)
+
+    try:
+        for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
+            add_job(job, allow_excluded_urls=True)
+    except Exception as e:
+        logger.warning("[scraper] AI web search failed: %s", e)
+
+    if not companies:
+        logger.warning("[scraper] No companies to scrape. Check search_config.yml")
 
     for company in companies:
         company_region_config = company.get("_region_config") or {
@@ -274,7 +293,12 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 title = item.get("title", "")
                 snippet = item.get("description", "")
 
-                if not url or url in seen_urls:
+                canonical_url = canonicalize_url(url)
+                if not url or canonical_url in seen_urls:
+                    continue
+                if is_excluded_url(url, config):
+                    logger.debug("[skip] Excluded URL pattern: %s", url[:80])
+                    filtered_count += 1
                     continue
                 if not is_valid_job_url(url):
                     logger.debug("[skip] Not a job posting URL: %s", url[:80])

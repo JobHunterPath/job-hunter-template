@@ -507,6 +507,7 @@ llm:
     cover_letter: openai
     discovery: openai
     linkedin: openai
+    ai_web_search: openai
     jd_extraction: openai
   models:
     validation: "REPLACE_WITH_OPENAI_MODEL"
@@ -515,6 +516,7 @@ llm:
     cover_letter: "REPLACE_WITH_OPENAI_MODEL"
     discovery: "REPLACE_WITH_OPENAI_MODEL"
     linkedin: "REPLACE_WITH_OPENAI_MODEL"
+    ai_web_search: "REPLACE_WITH_OPENAI_MODEL"
     jd_extraction: "REPLACE_WITH_OPENAI_MODEL"
 secrets:
   anthropic:
@@ -566,7 +568,8 @@ ollama pull llama3.2
 ollama list
 ```
 
-Use cheaper/faster models for `validation`, `scoring`, and `jd_extraction`.
+Use cheaper/faster models for `validation`, `scoring`, `jd_extraction`, and
+`ai_web_search`.
 Use stronger models for `tailoring`, `cover_letter`, `discovery`, and
 `linkedin`.
 
@@ -639,6 +642,35 @@ Optional search-provider secrets:
 
 The pipeline can still use direct ATS scraping, HTTP scraping, Playwright, and
 temporary SearXNG in GitHub Actions when optional search keys are missing.
+
+### Optional: Enable AI Web Search
+
+AI web search uses the configured `llm.providers.ai_web_search` provider to find
+job postings by title and region. It does not search by company name. Leave it
+disabled if you want the lowest-cost default setup.
+
+Recommended low-cost models:
+
+- Google: `gemini-2.5-flash-lite`
+- OpenAI: `gpt-5.4-nano`
+- Anthropic: `claude-haiku-4-5-20251001`
+
+To enable it, set:
+
+```yaml
+http:
+  search_providers:
+    ai_web_search:
+      enabled: true
+      max_prompts_per_run: 30
+      max_prompts_per_region: 10
+      max_results_per_prompt: 8
+      max_results_per_region: 30
+      max_total_results_per_run: 60
+```
+
+Every result still goes through dedupe, URL verification, JD fetching,
+validation, and scoring before any tailoring or cover-letter generation.
 
 ### Create A Brave Search API Key, Optional
 
@@ -980,9 +1012,9 @@ For search:
 4. Set `region` to `all` or enter one region key such as `primary`.
 5. Click **Run workflow**.
 
-Scheduled hunts run enabled regions one hour apart starting at 06:00
-Europe/Berlin time on weekdays. Run the workflow manually once before relying on
-the schedule.
+Scheduled hunts run the primary enabled region every weekday. Secondary enabled
+regions run Monday, Wednesday, and Friday. Empty slots exit before the expensive
+pipeline steps. Run the workflow manually once before relying on the schedule.
 
 ## 23. Review The Output
 
