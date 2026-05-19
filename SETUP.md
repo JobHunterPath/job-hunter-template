@@ -651,9 +651,9 @@ disabled if you want the lowest-cost default setup.
 
 Recommended models:
 
-- Anthropic: `claude-sonnet-4-6` (recommended), or `claude-haiku-4-5-20251001` (cheaper but prone to overload at peak hours)
-- Google: `gemini-2.5-flash-lite`
-- OpenAI: `gpt-4.1-nano`
+- Anthropic: `claude-haiku-4-5-20251001` (switch to `claude-sonnet-4-6` if you see frequent 529 errors at peak hours)
+- Google: `gemini-2.5-flash`
+- OpenAI: `gpt-4o-mini`
 
 To enable it, set:
 
