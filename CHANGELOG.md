@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.4 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `9b2fd8f` fix(llm-client): throttle provider request rates
+
+
 ## 2.10.3 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

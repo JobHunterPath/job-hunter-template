@@ -574,9 +574,11 @@ Use stronger models for `tailoring`, `cover_letter`, `discovery`, and
 `linkedin`.
 
 `llm.max_workers` controls how many validation and scoring LLM calls run in
-parallel. The default is `5`. If you use Google free-tier models (15 RPM for
-Gemini 2.5 Flash), leave it at `5` or lower. The LLM client retries 429 rate-limit
-errors and transient 5xx failures automatically with exponential backoff.
+parallel. The default is `5`. For Google free tier, start with `max_workers: 2`
+and set `llm.rate_limits.google.requests_per_minute` below the RPM shown in AI
+Studio. The LLM client retries 429 rate-limit errors and transient 5xx failures
+automatically with exponential backoff, but retries cannot overcome exhausted
+quota.
 
 Use the matching secret name:
 
@@ -657,7 +659,8 @@ disabled if you want the lowest-cost default setup.
 Recommended models:
 
 - Anthropic: `claude-haiku-4-5-20251001` (switch to `claude-sonnet-4-6` if you see frequent 529 errors at peak hours)
-- Google: `gemini-2.5-flash`
+- Google validation/JD extraction: `gemini-2.5-flash-lite`
+- Google scoring: `gemini-2.5-flash` until Flash Lite score quality is compared on real matches
 - OpenAI: `gpt-4o-mini`
 
 To enable it, set:

@@ -36,9 +36,15 @@ llm:
     ai_web_search: 1200
 
   # Concurrent LLM workers for validation and scoring.
-  # Google free tier allows 15 RPM for Gemini 2.5 Flash; keep this at 5 or below
-  # to avoid saturating it. Retry-with-backoff handles transient 429s automatically.
+  # Keep this conservative for provider rate limits. Retry-with-backoff handles
+  # transient 429s automatically.
   max_workers: 5
+
+  # Optional provider-level RPM throttle. This spaces calls before they hit the
+  # provider, which is different from retrying after a 429. Set to 0 to disable.
+  rate_limits:
+    google:
+      requests_per_minute: 4
 
 ollama:
   base_url: "http://localhost:11434"

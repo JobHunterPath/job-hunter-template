@@ -19,7 +19,9 @@ Use get_llm_client(role) wherever a model call is needed.
 """
 
 import logging
+import threading
 import time
+from collections import deque
 from typing import ClassVar
 
 logger = logging.getLogger(__name__)
@@ -40,8 +42,17 @@ class LLMClient:
     a branch in _init_client() and complete() without touching callers.
     """
 
-    def __init__(self, provider: str, api_key: str = "", base_url: str = "") -> None:
+    def __init__(
+        self,
+        provider: str,
+        api_key: str = "",
+        base_url: str = "",
+        requests_per_minute: int = 0,
+    ) -> None:
         self._provider = provider
+        self._requests_per_minute = max(0, requests_per_minute)
+        self._rate_lock = threading.Lock()
+        self._call_timestamps: deque[float] = deque()
         self._raw = self._init_client(provider, api_key, base_url)
 
     # ── SDK construction ───────────────────────────────────────────────────────
@@ -114,6 +125,7 @@ class LLMClient:
         last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
+                self._throttle()
                 return self._call(system=system, user=user, model=model, max_tokens=max_tokens)
             except Exception as exc:
                 if not _is_retryable(exc) or attempt == max_retries:
@@ -123,6 +135,25 @@ class LLMClient:
                 time.sleep(delay)
                 last_exc = exc
         raise last_exc  # unreachable but satisfies type checker
+
+    def _throttle(self) -> None:
+        if self._requests_per_minute <= 0:
+            return
+
+        window_seconds = 60.0
+        while True:
+            with self._rate_lock:
+                now = time.monotonic()
+                while self._call_timestamps and now - self._call_timestamps[0] >= window_seconds:
+                    self._call_timestamps.popleft()
+
+                if len(self._call_timestamps) < self._requests_per_minute:
+                    self._call_timestamps.append(now)
+                    return
+
+                wait_seconds = window_seconds - (now - self._call_timestamps[0])
+
+            time.sleep(max(wait_seconds, 0.1))
 
     def _call(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
 
@@ -209,7 +240,15 @@ def get_llm_client(role: str) -> LLMClient:
         api_key = get_secret(env_var, required=required) if env_var else ""
         base_url = ""
 
+    rate_cfg = llm.get("rate_limits", {}).get(provider, {}) or {}
+    requests_per_minute = int(rate_cfg.get("requests_per_minute", 0) or 0)
+
     logger.info(f"[llm] Initialising {provider} client (role: {role})")
-    client = LLMClient(provider, api_key=api_key, base_url=base_url)
+    client = LLMClient(
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        requests_per_minute=requests_per_minute,
+    )
     _cache[provider] = client
     return client
