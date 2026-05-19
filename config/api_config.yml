@@ -24,7 +24,7 @@ llm:
     discovery: "claude-sonnet-4-6"
     linkedin: "claude-sonnet-4-6"
     jd_extraction: "claude-haiku-4-5-20251001"
-    ai_web_search: "claude-sonnet-4-6"           # sonnet recommended; haiku is cheaper but prone to overload at peak hours
+    ai_web_search: "claude-haiku-4-5-20251001"  # may 529 at peak hours; switch to sonnet if reliability matters more than cost
   max_tokens:
     validation: 200
     scoring: 500
@@ -89,6 +89,9 @@ http:
       max_total_results_per_run: 60
       sources:
         linkedin:
+          # LinkedIn blocks Google from indexing individual job pages, so this
+          # source only works with Anthropic and OpenAI web-search tools.
+          # Disable it here if using the google provider to avoid empty results.
           enabled: true
           query_templates:
             - 'site:linkedin.com/jobs/view "{title}" "{location}"'

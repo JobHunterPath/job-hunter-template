@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.2 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `5d1d9a5` fix(ai-web-search): revert to haiku, fix Google JSON mode, add prompt delay
+
+
 ## 2.9.1 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.
