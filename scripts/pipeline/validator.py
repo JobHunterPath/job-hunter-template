@@ -12,6 +12,8 @@ calls on dead or obviously unsuitable postings.
 
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from core.config import load_api_config
 from core.llm_client import get_llm_client
@@ -66,25 +68,37 @@ def validate(
     check_urls = url_cfg.get("enabled", True)
     url_timeout = url_cfg.get("timeout_seconds", 5)
 
-    valid: list[dict] = []
-    rejected: list[dict] = []
+    max_workers = int(api_cfg.get("llm", {}).get("max_workers", 5))
 
-    for idx, job in enumerate(jobs, 1):
+    counter = 0
+    counter_lock = threading.Lock()
+    # Results collected in (original_index, kind, job) tuples for stable ordering
+    results: list[tuple[int, str, dict]] = []
+    results_lock = threading.Lock()
+
+    def _validate_job(args: tuple[int, dict]) -> None:
+        nonlocal counter
+        idx_orig, job = args
         url = job.get("url", "")
         label = f"{job.get('title', '?')[:40]} @ {job.get('company', '?')}"
-        logger.info(f"[validate] [{idx}/{len(jobs)}] {label}")
+        with counter_lock:
+            counter += 1
+            display_idx = counter
+        logger.info(f"[validate] [{display_idx}/{len(jobs)}] {label}")
 
         # 1 -- URL reachability
         if check_urls and url and not url_is_alive(url, url_timeout):
             logger.info(f"  x dead URL: {url[:80]}")
-            rejected.append({**job, "_rejection_reason": "dead_url"})
-            continue
+            with results_lock:
+                results.append((idx_orig, "rejected", {**job, "_rejection_reason": "dead_url"}))
+            return
 
         # 2 -- LLM freshness + experience check
         snippet = (job.get("snippet") or "")[:2000]
         if not snippet:
-            valid.append(job)
-            continue
+            with results_lock:
+                results.append((idx_orig, "valid", job))
+            return
 
         try:
             prompt = _PROMPT.format(max_years=max_years, snippet=snippet)
@@ -104,21 +118,32 @@ def validate(
             if not result.get("is_active", True):
                 reason = result.get("reason", "inactive")
                 logger.info(f"  x inactive: {reason}")
-                rejected.append({**job, "_rejection_reason": reason})
-                continue
+                with results_lock:
+                    results.append((idx_orig, "rejected", {**job, "_rejection_reason": reason}))
+                return
 
             if result.get("over_experience", False):
                 reason = result.get("reason", "over_experience")
                 logger.info(f"  x over experience limit: {reason}")
-                rejected.append({**job, "_rejection_reason": reason})
-                continue
+                with results_lock:
+                    results.append((idx_orig, "rejected", {**job, "_rejection_reason": reason}))
+                return
 
             logger.info("  v valid")
-            valid.append(job)
+            with results_lock:
+                results.append((idx_orig, "valid", job))
 
         except Exception as e:
             logger.warning(f"  ! validation error ({e}) -- passing through")
-            valid.append(job)
+            with results_lock:
+                results.append((idx_orig, "valid", job))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(_validate_job, enumerate(jobs)))
+
+    results.sort(key=lambda t: t[0])
+    valid = [job for _, kind, job in results if kind == "valid"]
+    rejected = [job for _, kind, job in results if kind == "rejected"]
 
     logger.info(f"[validate] {len(valid)} valid, {len(rejected)} rejected of {len(jobs)}")
     return valid, rejected

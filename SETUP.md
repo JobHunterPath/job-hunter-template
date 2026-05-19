@@ -540,7 +540,7 @@ Provider dependency checklist:
 |---|---|---|---|
 | `anthropic` | `anthropic` | `ANTHROPIC_API_KEY` | `true` |
 | `openai` | `openai` | `OPENAI_API_KEY` | `true` |
-| `google` | `google-generativeai` | `GOOGLE_API_KEY` | `true` |
+| `google` | `google-genai` | `GOOGLE_API_KEY` | `true` |
 | `ollama` | `openai` | none for local Ollama | no secret required |
 
 If you mix providers by role, mark every provider you actually use as
@@ -572,6 +572,11 @@ Use cheaper/faster models for `validation`, `scoring`, `jd_extraction`, and
 `ai_web_search`.
 Use stronger models for `tailoring`, `cover_letter`, `discovery`, and
 `linkedin`.
+
+`llm.max_workers` controls how many validation and scoring LLM calls run in
+parallel. The default is `5`. If you use Google free-tier models (15 RPM for
+Gemini 2.5 Flash), leave it at `5` or lower. The LLM client retries 429 rate-limit
+errors and transient 5xx failures automatically with exponential backoff.
 
 Use the matching secret name:
 

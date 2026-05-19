@@ -86,7 +86,7 @@ For LLM providers, `config/api_config.yml`, GitHub Secrets, and
 |---|---|---|
 | `anthropic` | `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai` | `openai` | `OPENAI_API_KEY` |
-| `google` | `google-generativeai` | `GOOGLE_API_KEY` |
+| `google` | `google-genai` | `GOOGLE_API_KEY` |
 | `ollama` | `openai` | none for local Ollama |
 
 Set `secrets.<provider>.required: true` only for providers you actually use.
@@ -136,6 +136,12 @@ Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
 LinkedIn and StepStone URLs discovered by AI web search still pass through the
 normal dedupe, URL verification, JD fetching, validation, and scoring gates
 before any tailoring or cover-letter generation happens.
+
+**Parallelism:** company scraping, validation, and scoring all run concurrently.
+`llm.max_workers` (default `5`) controls concurrent LLM calls — keep it at 5 or
+below for Google free-tier models (15 RPM). `scraping.max_workers` (default `10`)
+in `search_config.yml` controls concurrent company scrapes. The LLM client retries
+rate-limit errors (429) and transient 5xx failures automatically with backoff.
 
 ## Local Run
 
