@@ -24,7 +24,7 @@ llm:
     discovery: "claude-sonnet-4-6"
     linkedin: "claude-sonnet-4-6"
     jd_extraction: "claude-haiku-4-5-20251001"
-    ai_web_search: "claude-haiku-4-5-20251001"  # cheapest: haiku (anthropic), gemini-2.5-flash-lite (google), gpt-4.1-nano (openai)
+    ai_web_search: "claude-sonnet-4-6"           # sonnet recommended; haiku is cheaper but prone to overload at peak hours
   max_tokens:
     validation: 200
     scoring: 500
@@ -81,6 +81,7 @@ http:
     ai_web_search:
       enabled: false
       # Queries are title + region only; company names are never included.
+      prompt_delay_seconds: 5         # pause between prompts to avoid overloading the web-search endpoint
       max_prompts_per_run: 30
       max_prompts_per_region: 10
       max_results_per_prompt: 8

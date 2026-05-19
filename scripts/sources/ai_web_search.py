@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -146,7 +147,6 @@ def _complete_with_web_search(provider: str, model: str, user: str, max_tokens: 
             "tools": [{"google_search": {}}],
             "generationConfig": {
                 "maxOutputTokens": max_tokens,
-                "responseMimeType": "application/json",
             },
         }
         resp = requests.post(
@@ -241,7 +241,9 @@ def fetch_ai_web_search_jobs(
 
     provider, model, max_tokens = _llm_settings()
     budget = make_budget(config)
+    prompt_delay = float(config.get("prompt_delay_seconds", 5))
     jobs: list[dict[str, str]] = []
+    first_prompt = True
 
     for region_name, region_config in regions.items():
         for title in title_filters:
@@ -253,6 +255,10 @@ def fetch_ai_web_search_jobs(
                 if not budget.can_prompt(region_name):
                     logger.info("[ai-web-search] prompt cap reached for region=%s", region_name)
                     break
+
+                if not first_prompt and prompt_delay > 0:
+                    time.sleep(prompt_delay)
+                first_prompt = False
 
                 user = (
                     f"Query: {query}\n"
