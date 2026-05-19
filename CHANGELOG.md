@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.1 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `49766cb` fix(ai-web-search): switch to Sonnet, update model recommendations
+
+
 ## 2.9.0 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

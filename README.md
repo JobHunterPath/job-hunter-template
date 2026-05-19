@@ -115,7 +115,7 @@ llm:
   providers:
     ai_web_search: anthropic
   models:
-    ai_web_search: "claude-haiku-4-5-20251001"
+    ai_web_search: "claude-sonnet-4-6"
   max_tokens:
     ai_web_search: 1200
 
@@ -130,8 +130,9 @@ http:
       max_total_results_per_run: 60
 ```
 
-Recommended low-cost model choices are `gemini-2.5-flash-lite` for Google,
-`gpt-5.4-nano` for OpenAI, and `claude-haiku-4-5-20251001` for Anthropic.
+Recommended models: `claude-sonnet-4-6` for Anthropic (`claude-haiku-4-5-20251001`
+is cheaper but prone to overload at peak hours), `gemini-2.5-flash-lite` for
+Google, `gpt-4.1-nano` for OpenAI.
 LinkedIn and StepStone URLs discovered by AI web search still pass through the
 normal dedupe, URL verification, JD fetching, validation, and scoring gates
 before any tailoring or cover-letter generation happens.

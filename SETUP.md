@@ -649,11 +649,11 @@ AI web search uses the configured `llm.providers.ai_web_search` provider to find
 job postings by title and region. It does not search by company name. Leave it
 disabled if you want the lowest-cost default setup.
 
-Recommended low-cost models:
+Recommended models:
 
+- Anthropic: `claude-sonnet-4-6` (recommended), or `claude-haiku-4-5-20251001` (cheaper but prone to overload at peak hours)
 - Google: `gemini-2.5-flash-lite`
-- OpenAI: `gpt-5.4-nano`
-- Anthropic: `claude-haiku-4-5-20251001`
+- OpenAI: `gpt-4.1-nano`
 
 To enable it, set:
 
