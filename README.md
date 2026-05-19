@@ -132,16 +132,20 @@ http:
 
 Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
 `claude-sonnet-4-6` if you see frequent 529 errors at peak hours),
-`gemini-2.5-flash` for Google, `gpt-4o-mini` for OpenAI.
+`gemini-2.5-flash-lite` for Google validation/JD extraction,
+`gemini-2.5-flash` or Claude for scoring until you compare score quality, and
+`gpt-4o-mini` for OpenAI.
 LinkedIn and StepStone URLs discovered by AI web search still pass through the
 normal dedupe, URL verification, JD fetching, validation, and scoring gates
 before any tailoring or cover-letter generation happens.
 
 **Parallelism:** company scraping, validation, and scoring all run concurrently.
-`llm.max_workers` (default `5`) controls concurrent LLM calls — keep it at 5 or
-below for Google free-tier models (15 RPM). `scraping.max_workers` (default `10`)
-in `search_config.yml` controls concurrent company scrapes. The LLM client retries
-rate-limit errors (429) and transient 5xx failures automatically with backoff.
+`llm.max_workers` (default `5`) controls concurrent LLM calls. For Google free
+tier, start with `max_workers: 2` and set
+`llm.rate_limits.google.requests_per_minute` below the RPM shown in AI Studio.
+`scraping.max_workers` (default `10`) in `search_config.yml` controls concurrent
+company scrapes. The LLM client retries rate-limit errors (429) and transient
+5xx failures automatically with backoff.
 
 ## Local Run
 
