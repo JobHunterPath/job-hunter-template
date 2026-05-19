@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.3 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `34d98c8` fix(template): sync search_config — add jobspy block and update german_indicators
+
+
 ## 2.11.2 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.
