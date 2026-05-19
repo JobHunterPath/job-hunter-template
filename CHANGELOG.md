@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.3 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `3ffbc34` chore(skills): migrate Claude commands to project skills
+
+
 ## 2.10.2 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.
