@@ -38,7 +38,11 @@ COMPANIES = CONFIG['regions']['berlin']['companies']
 @pytest.fixture(autouse=True)
 def _disable_external_scrape_paths():
     with patch('sources.scraper.fetch_playwright_career_jobs', return_value=[]), \
-         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[]):
+         patch('sources.scraper.discover_ats_jobs_by_search', return_value=[]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[]), \
+         patch('sources.scraper.fetch_jobspy_jobs', return_value=[]), \
+         patch('sources.scraper.load_cached_candidate_urls', return_value=set()), \
+         patch('sources.scraper.save_cached_candidate_urls'):
         yield
 
 
@@ -290,6 +294,59 @@ def test_scrape_runs_ai_web_search_without_companies():
         jobs = scraper.scrape()
 
     assert jobs == [ai_job]
+
+
+def test_scrape_orders_direct_ats_then_search_discovery_then_ai():
+    discovery_job = {
+        "title": "Product Owner",
+        "company": "DiscoveryCo",
+        "url": "https://jobs.lever.co/discovery/12345678-1234-1234-1234-123456789abc",
+        "posted": "",
+        "snippet": "Discovery role",
+        "source": "SearXNG ATS discovery: lever",
+    }
+    ai_job = {
+        "title": "Product Manager",
+        "company": "AiCo",
+        "url": "https://www.linkedin.com/jobs/view/123456",
+        "posted": "",
+        "snippet": "AI search role",
+        "source": "AI web search: linkedin",
+    }
+
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[ATS_JOB]), \
+         patch('sources.scraper.discover_ats_jobs_by_search', return_value=[discovery_job]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs', return_value=[ai_job]):
+        jobs = scraper.scrape()
+
+    assert [job["source"] for job in jobs] == [
+        "Greenhouse API",
+        "SearXNG ATS discovery: lever",
+        "AI web search: linkedin",
+    ]
+
+
+def test_scrape_skips_cached_discovery_candidates():
+    discovery_job = {
+        "title": "Product Owner",
+        "company": "DiscoveryCo",
+        "url": "https://jobs.lever.co/discovery/12345678-1234-1234-1234-123456789abc",
+        "posted": "",
+        "snippet": "Discovery role",
+        "source": "SearXNG ATS discovery: lever",
+    }
+
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_companies', return_value=[]), \
+         patch('sources.scraper.discover_ats_jobs_by_search', return_value=[discovery_job]), \
+         patch('sources.scraper.load_cached_candidate_urls', return_value={scraper.canonicalize_url(discovery_job["url"])}), \
+         patch('sources.scraper.save_cached_candidate_urls') as save_cache:
+        jobs = scraper.scrape()
+
+    assert jobs == []
+    save_cache.assert_not_called()
 
 def test_scrape_brave_continues_after_api_error():
     with patch('sources.scraper.load_search_config', return_value=CONFIG), \

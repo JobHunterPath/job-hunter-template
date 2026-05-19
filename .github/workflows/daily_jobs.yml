@@ -224,7 +224,7 @@ jobs:
         run: |
           git config user.name "job-hunt-bot"
           git config user.email "bot@job-hunt"
-          git add jobs/ README.md config/applied_jobs.yml
+          git add jobs/ README.md config/applied_jobs.yml config/discovery_cache.yml
           git diff --staged --quiet || git commit -m "jobs(${{ steps.hunt_region.outputs.label }}): $(date +%Y-%m-%d)"
           git pull --rebase origin main
           git push

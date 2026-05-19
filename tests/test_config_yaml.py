@@ -10,8 +10,10 @@ def test_workflow_and_config_yaml_parse():
         ".github/workflows/daily_jobs.yml",
         "config/search_config.yml",
         "config/api_config.yml",
+        "config/discovery_cache.yml",
         "template/config/search_config.yml",
         "template/config/api_config.yml",
+        "template/config/discovery_cache.yml",
     ]
 
     for file in files:

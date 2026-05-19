@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from html import unescape
 from typing import Optional
@@ -331,6 +332,19 @@ class SearchRouter:
         return all_results[:count]
 
 
+class ProviderSearchRouter(SearchRouter):
+    """Search router constrained to a caller-provided provider name order."""
+
+    def __init__(self, provider_names: list[str]) -> None:
+        available = {
+            "searxng": SearxngProvider(),
+            "brave": BraveProvider(),
+            "tavily": TavilyProvider(),
+            "exa": ExaProvider(),
+        }
+        super().__init__([available[name] for name in provider_names if name in available])
+
+
 def search_web(query: str, region_config: dict, count: int = 10) -> list[dict]:
     """Compatibility helper returning Brave-like dictionaries."""
     return [
@@ -342,6 +356,129 @@ def search_web(query: str, region_config: dict, count: int = 10) -> list[dict]:
         }
         for result in SearchRouter().search(query, region_config, count=count)
     ]
+
+
+_ATS_DISCOVERY_SITES = {
+    "greenhouse": (
+        "site:boards.greenhouse.io OR site:job-boards.greenhouse.io",
+        r"(?:boards|job-boards)\.greenhouse\.io$",
+        r"/jobs/\d+",
+    ),
+    "lever": (
+        "site:jobs.lever.co",
+        r"^jobs\.lever\.co$",
+        r"^/[^/]+/[0-9a-f-]{36}",
+    ),
+    "ashby": (
+        "site:jobs.ashbyhq.com",
+        r"^jobs\.ashbyhq\.com$",
+        r"^/[^/]+/[0-9a-f-]{36}",
+    ),
+    "smartrecruiters": (
+        "site:jobs.smartrecruiters.com",
+        r"^jobs\.smartrecruiters\.com$",
+        r"^/[^/]+/\d+",
+    ),
+    "workable": (
+        "site:apply.workable.com",
+        r"^apply\.workable\.com$",
+        r"^/[^/]+/j/[A-F0-9]+",
+    ),
+    "personio": (
+        "site:jobs.personio.de OR site:jobs.personio.com",
+        r"(?:jobs\.personio\.(?:de|com)|\.jobs\.personio\.de)$",
+        r"/job/",
+    ),
+    "recruitee": (
+        "site:recruitee.com",
+        r"recruitee\.com$",
+        r"/o/",
+    ),
+    "hibob": (
+        "site:careers.hibob.com/jobs",
+        r"\.careers\.hibob\.com$",
+        r"/jobs/[0-9a-f-]{36}",
+    ),
+}
+
+
+def _passes_ats_discovery_shape(url: str, source: str) -> bool:
+    _, host_pattern, path_pattern = _ATS_DISCOVERY_SITES[source]
+    parsed = urlparse(url)
+    return (
+        re.search(host_pattern, parsed.netloc, re.IGNORECASE) is not None
+        and re.search(path_pattern, parsed.path, re.IGNORECASE) is not None
+    )
+
+
+def _company_from_ats_url(url: str, source: str) -> str:
+    parsed = urlparse(url)
+    parts = [part for part in parsed.path.split("/") if part]
+    if source in {"greenhouse", "lever", "ashby", "smartrecruiters", "workable"} and parts:
+        return parts[0].replace("-", " ").replace("_", " ").strip().title()
+    if source == "personio":
+        if parsed.netloc.endswith(".jobs.personio.de"):
+            return parsed.netloc.split(".jobs.personio.de", 1)[0].replace("-", " ").title()
+        if parts and parts[0] != "job":
+            return parts[0].replace("-", " ").title()
+    if source == "recruitee":
+        return parsed.netloc.split(".recruitee.com", 1)[0].replace("-", " ").title()
+    if source == "hibob":
+        return parsed.netloc.split(".careers.hibob.com", 1)[0].replace("-", " ").title()
+    return ""
+
+
+def discover_ats_jobs_by_search(
+    title_filters: list[str],
+    regions: dict[str, dict],
+    excluded_title_terms: list[str] | None = None,
+    *,
+    provider_order: list[str] | None = None,
+) -> list[dict]:
+    """Find individual ATS job URLs from broad title+region search queries."""
+    if not title_filters or not regions:
+        return []
+
+    cfg = _search_cfg().get("ats_discovery", {}) or {}
+    if not cfg.get("enabled", True):
+        return []
+
+    max_results_per_query = int(cfg.get("results_per_query", 10))
+    sources = cfg.get("sources") or list(_ATS_DISCOVERY_SITES)
+    router = ProviderSearchRouter(provider_order or _search_cfg().get("order") or ["searxng", "brave", "tavily", "exa"])
+    jobs: list[dict] = []
+    seen: set[str] = set()
+
+    for region_name, region_config in regions.items():
+        location = region_config.get("location") or region_name
+        for title in title_filters:
+            for source in sources:
+                if source not in _ATS_DISCOVERY_SITES:
+                    continue
+                site_query, _, _ = _ATS_DISCOVERY_SITES[source]
+                query = f'({site_query}) "{title}" "{location}"'
+                for result in router.search(query, region_config, count=max_results_per_query):
+                    if not _passes_ats_discovery_shape(result.url, source):
+                        continue
+                    if not title_matches(result.title, title_filters, excluded_title_terms):
+                        continue
+                    canonical = canonicalize_url(result.url)
+                    if canonical in seen:
+                        continue
+                    seen.add(canonical)
+                    jobs.append({
+                        "title": result.title,
+                        "company": _company_from_ats_url(result.url, source),
+                        "location": location,
+                        "url": result.url,
+                        "posted": "",
+                        "snippet": result.description,
+                        "source": f"{result.source} ATS discovery: {source}",
+                        "query": query,
+                    })
+
+    logger.info("[search-discovery] complete: %s jobs found", len(jobs))
+    return jobs
 
 
 def extract_jobs_from_html(

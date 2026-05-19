@@ -105,6 +105,15 @@ GitHub Actions starts SearXNG temporarily for each hunt, discovery, and
 tailor-links job. If SearXNG or any API provider fails, the pipeline continues
 with the next available option.
 
+Broad ATS discovery runs after configured company ATS/API scraping. It searches
+title + region for individual ATS posting URLs, follows the provider order above
+so SearXNG is tried before Brave/Tavily/Exa, and covers Greenhouse, Lever,
+Ashby, SmartRecruiters, Workable, Personio, Recruitee, and HiBob URL shapes.
+
+`config/discovery_cache.yml` stores candidate URLs already seen from broad
+discovery sources so future runs do not spend SearXNG/search API/AI calls
+rediscovering the same listings.
+
 **JD enrichment:** `http.jd_enrichment` controls best-effort fetching of full job
 descriptions for sparse search snippets. LinkedIn job pages often return HTTP
 429 to direct fetches, so `linkedin\.com/jobs/` is skipped by default and the
@@ -141,10 +150,11 @@ Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
 `gemini-2.5-flash-lite` for Google validation/JD extraction,
 `gemini-2.5-flash` or Claude for scoring until you compare score quality, and
 `gpt-4o-mini` for OpenAI.
-The default sources (`greenhouse`, `lever`, `ashby`, `generic_web`) target
-well-indexed ATS boards and exclude aggregators. Every result still passes
-through dedupe, URL verification, JD fetching, validation, and scoring gates
-before any tailoring or cover-letter generation happens.
+The default sources (`greenhouse`, `lever`, `ashby`, `smartrecruiters`,
+`workable`, `personio`, `recruitee`, `hibob`, `generic_web`) target well-indexed
+ATS boards and exclude aggregators. Every result still passes through dedupe,
+URL verification, JD fetching, validation, and scoring gates before any
+tailoring or cover-letter generation happens.
 
 AI web search includes compact exclusion rules from `config/search_config.yml`
 in each prompt and filters low-confidence results, source-specific listing/search
@@ -213,6 +223,6 @@ Keep those two lists aligned: add the role families you want to
 ## Applied Jobs
 
 <!-- JOBS_TABLE_START -->
-| Date | Job | Score | Files |
-|---|---|---|---|
+| Date | Job | Location | Score | Files |
+|---|---|---|---|---|
 <!-- JOBS_TABLE_END -->

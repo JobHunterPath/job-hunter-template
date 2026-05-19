@@ -159,20 +159,22 @@ def filter_matches(
         with counter_lock:
             counter += 1
             idx = counter
-        logger.info(f"[scorer] [{idx}/{len(jobs)}] Scoring: {job['title']} @ {job['company']}...")
+        label = f"{job['title']} @ {job['company']}"
+        prefix = f"[scorer] [{idx}/{len(jobs)}] {label}"
+        logger.info(f"{prefix}: scoring...")
         result = score(job, config)
         score_val = result["score"]
         yrs = result.get("years_exp_required")
-        logger.info(f"  score={score_val}, years_required={yrs}")
+        logger.info(f"{prefix}: score={score_val}, years_required={yrs}")
         override_min = check_strategic_override(job, config)
         effective_min = override_min if override_min is not None else min_score
         if score_val < effective_min:
-            logger.debug(f"[skip] Score {score_val} below threshold {effective_min}")
+            logger.debug(f"{prefix}: skipped, score {score_val} below threshold {effective_min}")
             return None
         if yrs is not None and yrs > max_years:
-            logger.debug(f"[skip] Years required ({yrs}) exceeds maximum ({max_years})")
+            logger.debug(f"{prefix}: skipped, years required ({yrs}) exceeds maximum ({max_years})")
             return None
-        logger.info("  matched")
+        logger.info(f"{prefix}: matched")
         return result
 
     matched = []
