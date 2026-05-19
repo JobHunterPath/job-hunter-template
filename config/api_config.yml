@@ -35,6 +35,11 @@ llm:
     jd_extraction: 1500
     ai_web_search: 1200
 
+  # Concurrent LLM workers for validation and scoring.
+  # Google free tier allows 15 RPM for Gemini 2.5 Flash; keep this at 5 or below
+  # to avoid saturating it. Retry-with-backoff handles transient 429s automatically.
+  max_workers: 5
+
 ollama:
   base_url: "http://localhost:11434"
 
@@ -71,6 +76,7 @@ http:
     timeout_seconds: 15
     results_per_query: 10
   search_providers:
+    timeout_seconds: 10
     max_consecutive_failures: 3
     order:
       - searxng

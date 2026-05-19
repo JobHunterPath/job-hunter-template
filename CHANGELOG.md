@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.1 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `aaec610` docs: sync template configs and docs for parallelism changes
+
+
 ## 2.10.0 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

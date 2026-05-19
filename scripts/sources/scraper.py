@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -182,14 +184,16 @@ def brave_search(query: str, region_config: dict, count: Optional[int] = None) -
     ]
 
 
-def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str]):
+def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_filters: list[str], lock: Optional[threading.Lock] = None):
     excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
+    _lock = lock or threading.Lock()
 
     def add_job(job: dict, allow_excluded_urls: bool = False) -> bool:
         url = job.get("url", "")
         canonical_url = canonicalize_url(url)
-        if not url or canonical_url in seen_urls:
+        if not url:
             return False
+        # All filtering before the lock (no shared state needed)
         if not allow_excluded_urls and is_excluded_url(url, config):
             logger.debug("[skip] Excluded URL pattern: %s", url[:80])
             return False
@@ -205,9 +209,12 @@ def _make_filter(config: dict, seen_urls: set[str], results: list[dict], title_f
         if is_excluded(job.get("snippet", ""), config):
             logger.debug("[skip] Excluded industry: %s", job.get("title", "")[:60])
             return False
-
-        seen_urls.add(canonical_url)
-        results.append(job)
+        # Atomic dedup + append
+        with _lock:
+            if canonical_url in seen_urls:
+                return False
+            seen_urls.add(canonical_url)
+            results.append(job)
         logger.info(
             "[found] %s @ %s [%s]",
             job.get("title", "")[:50],
@@ -240,7 +247,8 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
     results: list[dict] = []
     seen_urls: set[str] = set()
-    add_job = _make_filter(config, seen_urls, results, title_filters)
+    lock = threading.Lock()
+    add_job = _make_filter(config, seen_urls, results, title_filters, lock)
 
     try:
         for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
@@ -251,7 +259,10 @@ def scrape(region: Optional[str] = None) -> list[dict]:
     if not companies:
         logger.warning("[scraper] No companies to scrape. Check search_config.yml")
 
-    for company in companies:
+    scraping_cfg = config.get("scraping", {})
+    max_workers = int(scraping_cfg.get("max_workers", 10))
+
+    def _process_company(company: dict) -> None:
         company_region_config = company.get("_region_config") or {
             "location": company.get("location", ""),
             "country": company.get("country", ""),
@@ -261,7 +272,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
         if ats_jobs is not None:
             for job in ats_jobs:
                 add_job(job)
-            continue
+            return
 
         direct_found = 0
         try:
@@ -278,7 +289,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 logger.debug("[scraper] Playwright career scrape failed for %s: %s", company["name"], e)
 
         if direct_found:
-            continue
+            return
 
         for query, company_name, _ in build_queries([company], config):
             try:
@@ -293,8 +304,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
                 title = item.get("title", "")
                 snippet = item.get("description", "")
 
-                canonical_url = canonicalize_url(url)
-                if not url or canonical_url in seen_urls:
+                if not url:
                     continue
                 if is_excluded_url(url, config):
                     logger.debug("[skip] Excluded URL pattern: %s", url[:80])
@@ -321,6 +331,19 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
             if filtered_count > 0:
                 logger.debug("[scraper] Filtered %s ineligible results from %s", filtered_count, company_name)
+
+    total_scrape_timeout = int(scraping_cfg.get("total_timeout_seconds", 1800))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_process_company, company): company for company in companies}
+        try:
+            for future in as_completed(futures, timeout=total_scrape_timeout):
+                company = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.warning("[scraper] Error processing %s: %s", company.get("name", "?"), e)
+        except TimeoutError:
+            logger.warning("[scraper] Company scraping hit %ss total timeout, proceeding with partial results", total_scrape_timeout)
 
     boards_cfg = config.get("job_boards", {})
 

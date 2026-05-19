@@ -184,7 +184,7 @@ class SearxngProvider(SearchProvider):
             f"{self.base_url}/search",
             params=params,
             headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-            timeout=_timeout("brave_search"),
+            timeout=_timeout("search_providers"),
         )
         resp.raise_for_status()
         raw = resp.json().get("results", [])[:count]

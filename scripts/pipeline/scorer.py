@@ -5,6 +5,8 @@ Scoring criteria are configurable via scoring_config.yml.
 
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 import yaml
 
@@ -78,6 +80,8 @@ def score(job: dict, config: dict) -> dict:
             raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
         result = json.loads(raw)
         logger.debug(f"[scorer] {job.get('title', 'Unknown')} → score={result.get('score')}")
+    except ImportError:
+        raise  # missing SDK affects every job — let filter_matches fail fast
     except json.JSONDecodeError as e:
         logger.error(f"[scorer] JSON parse error: {e}")
         result = {"score": 0, "matched_keywords": [], "gaps": ["parse error"], "years_exp_required": None}
@@ -134,28 +138,45 @@ def filter_matches(
 
     logger.info(f"[scorer] Filtering jobs: min_score={min_score}, max_years={max_years}")
 
-    matched = []
-    for idx, job in enumerate(jobs, 1):
+    # Fail fast if the LLM SDK isn't installed rather than silently scoring everything 0.
+    try:
+        get_llm_client("scoring")
+    except ImportError as e:
+        logger.error(f"[scorer] Cannot initialise scoring client — SDK missing: {e}")
+        raise
+
+    api_cfg = load_api_config()
+    max_workers = int(api_cfg.get("llm", {}).get("max_workers", 5))
+
+    counter = 0
+    counter_lock = threading.Lock()
+
+    def _score_job(job: dict) -> Optional[dict]:
+        nonlocal counter
+        with counter_lock:
+            counter += 1
+            idx = counter
         logger.info(f"[scorer] [{idx}/{len(jobs)}] Scoring: {job['title']} @ {job['company']}...")
         result = score(job, config)
-
         score_val = result["score"]
         yrs = result.get("years_exp_required")
         logger.info(f"  score={score_val}, years_required={yrs}")
-
         override_min = check_strategic_override(job, config)
         effective_min = override_min if override_min is not None else min_score
-
         if score_val < effective_min:
             logger.debug(f"[skip] Score {score_val} below threshold {effective_min}")
-            continue
-
+            return None
         if yrs is not None and yrs > max_years:
             logger.debug(f"[skip] Years required ({yrs}) exceeds maximum ({max_years})")
-            continue
-
-        matched.append(result)
+            return None
         logger.info("  matched")
+        return result
+
+    matched = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for result in executor.map(_score_job, jobs):
+            if result is not None:
+                matched.append(result)
 
     logger.info(f"[scorer] {len(matched)}/{len(jobs)} jobs matched threshold")
     return matched

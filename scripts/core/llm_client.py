@@ -19,9 +19,17 @@ Use get_llm_client(role) wherever a model call is needed.
 """
 
 import logging
+import time
 from typing import ClassVar
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _is_retryable(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "429" in msg or "rate" in msg or "quota" in msg or "unavailable" in msg
 
 
 class LLMClient:
@@ -85,15 +93,17 @@ class LLMClient:
         user: str,
         model: str,
         max_tokens: int,
+        max_retries: int = 3,
     ) -> str:
         """
         Send a prompt and return the response as a plain string.
 
         Args:
-            system:     System / instruction prompt. May be empty.
-            user:       User message content.
-            model:      Provider-specific model identifier.
-            max_tokens: Maximum tokens to generate.
+            system:      System / instruction prompt. May be empty.
+            user:        User message content.
+            model:       Provider-specific model identifier.
+            max_tokens:  Maximum tokens to generate.
+            max_retries: Retry attempts on transient errors (rate limits, 5xx).
 
         Returns:
             Stripped response text.
@@ -101,6 +111,20 @@ class LLMClient:
         logger.debug(
             f"[llm] provider={self._provider} model={model} max_tokens={max_tokens}"
         )
+        last_exc: Exception | None = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                return self._call(system=system, user=user, model=model, max_tokens=max_tokens)
+            except Exception as exc:
+                if not _is_retryable(exc) or attempt == max_retries:
+                    raise
+                delay = 2 ** attempt
+                logger.warning(f"[llm] retryable error (attempt {attempt}/{max_retries}), retrying in {delay}s: {exc}")
+                time.sleep(delay)
+                last_exc = exc
+        raise last_exc  # unreachable but satisfies type checker
+
+    def _call(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
 
         if self._provider == "anthropic":
             kwargs: dict = dict(

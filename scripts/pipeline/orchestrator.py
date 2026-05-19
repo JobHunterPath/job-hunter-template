@@ -24,6 +24,7 @@ import re
 import sys
 import yaml
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -259,7 +260,8 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
 
     logger.info(f"[pipeline] Enriching {len(sparse)} job(s) with sparse snippets...")
     enriched: dict[str, dict] = {}
-    for job in sparse:
+
+    def _fetch_one(job: dict) -> None:
         logger.info(f"  enriching: {job['title'][:50]} @ {job['company']}")
         full = fetch_jd(job["url"], use_llm=False)
         if full and full.get("snippet"):
@@ -267,6 +269,9 @@ def _enrich_snippets(jobs: list[dict]) -> list[dict]:
             logger.info(f"    -> {len(full['snippet'])} chars")
         else:
             logger.warning(f"    -> enrichment failed, keeping original snippet")
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        list(executor.map(_fetch_one, sparse))
 
     return [enriched.get(j["url"], j) for j in jobs]
 
