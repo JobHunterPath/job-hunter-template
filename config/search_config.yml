@@ -76,10 +76,29 @@ exclusion_rules:
     - "position has been filled"
     - "not accepting applications"
   german_indicators:
-    - "m/w/d"
-    - "wir suchen"
-    - "deutschkenntnisse"
-    - "vollzeit"
+    # German sentence fragments — only appear in German-language postings
+    - wir suchen
+    - wir freuen uns
+    - jetzt bewerben
+    - ihre aufgaben
+    - ihr profil
+    - deine aufgaben
+    - dein profil
+    - was wir bieten
+    - was du mitbringst
+    - das bieten wir
+    # Unmistakable German compound words unique to job descriptions
+    - stellenangebot
+    - berufserfahrung
+    - deutschkenntnisse
+
+jobspy:
+  enabled: true
+  hours_old: 72             # only return jobs posted within this window
+  results_per_query: 20     # per title × region × source
+  # Maps region name to Indeed country code. Regions not listed use Google Jobs only.
+  country_indeed_by_region:
+    primary: germany        # replace with the correct country for your primary region
 
 excluded_companies:
   - "Example Excluded Company"
