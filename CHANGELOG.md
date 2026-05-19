@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.0 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `2ee06b0` feat: switch validation, scoring, jd_extraction to Google free tier
+
+
 ## 2.9.2 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.
