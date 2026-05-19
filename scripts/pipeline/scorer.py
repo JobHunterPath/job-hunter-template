@@ -50,21 +50,27 @@ Rules:
 Return JSON only."""
 
 
+def _extract_json(raw: str) -> str:
+    """Strip markdown fences and extract the outermost JSON object."""
+    text = raw.strip()
+    # Strip ``` or ```json fences
+    if text.startswith("```"):
+        lines = text.splitlines()
+        end = next((i for i in range(len(lines) - 1, 0, -1) if lines[i].strip() == "```"), None)
+        text = "\n".join(lines[1:end] if end else lines[1:]).strip()
+    # Fallback: find outermost { … } in case the model added preamble text
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        text = text[start : end + 1]
+    return text
+
+
 def score(job: dict, config: dict) -> dict:
-    """
-    Score a job posting against the base resume.
-
-    Args:
-        job:    Job posting dict with 'snippet' and other metadata.
-        config: Scoring configuration dict.
-
-    Returns:
-        Dict with score, matched_keywords, gaps, years_exp_required, and job.
-    """
     api_cfg = load_api_config()
     llm = api_cfg.get("llm", {})
     model = llm.get("models", {}).get("scoring", "claude-haiku-4-5-20251001")
-    max_tokens = llm.get("max_tokens", {}).get("scoring", 500)
+    max_tokens = llm.get("max_tokens", {}).get("scoring", 1000)
 
     prompt = PROMPT.format(resume=BASE_RESUME[:6000], jd=job["snippet"])
 
@@ -75,15 +81,12 @@ def score(job: dict, config: dict) -> dict:
             model=model,
             max_tokens=max_tokens,
         )
-        if raw.startswith("```"):
-            lines = raw.splitlines()
-            raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:]).strip()
-        result = json.loads(raw)
+        result = json.loads(_extract_json(raw))
         logger.debug(f"[scorer] {job.get('title', 'Unknown')} → score={result.get('score')}")
     except ImportError:
         raise  # missing SDK affects every job — let filter_matches fail fast
     except json.JSONDecodeError as e:
-        logger.error(f"[scorer] JSON parse error: {e}")
+        logger.error(f"[scorer] JSON parse error: {e} | raw: {raw[:200]!r}")
         result = {"score": 0, "matched_keywords": [], "gaps": ["parse error"], "years_exp_required": None}
     except Exception as e:
         logger.error(f"[scorer] API error: {e}")

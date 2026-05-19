@@ -27,7 +27,7 @@ llm:
     ai_web_search: "claude-haiku-4-5-20251001"  # may 529 at peak hours; switch to sonnet if reliability matters more than cost
   max_tokens:
     validation: 200
-    scoring: 500
+    scoring: 1000
     tailoring: 4000
     cover_letter: 800
     discovery: 400
