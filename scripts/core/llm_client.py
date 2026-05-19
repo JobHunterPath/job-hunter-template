@@ -55,11 +55,10 @@ class LLMClient:
 
         if provider == "google":
             try:
-                import google.generativeai as genai
+                from google import genai
             except ImportError:
-                raise ImportError("python -m pip install google-generativeai")
-            genai.configure(api_key=api_key)
-            return genai
+                raise ImportError("python -m pip install google-genai")
+            return genai.Client(api_key=api_key)
 
         if provider == "ollama":
             try:
@@ -127,13 +126,17 @@ class LLMClient:
             return resp.choices[0].message.content.strip()
 
         if self._provider == "google":
-            init_kwargs: dict = {"model_name": model}
+            from google.genai import types
+            config = types.GenerateContentConfig(max_output_tokens=max_tokens)
             if system:
-                init_kwargs["system_instruction"] = system
-            model_obj = self._raw.GenerativeModel(**init_kwargs)
-            resp = model_obj.generate_content(
-                user,
-                generation_config={"max_output_tokens": max_tokens},
+                config = types.GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=max_tokens,
+                )
+            resp = self._raw.models.generate_content(
+                model=model,
+                contents=user,
+                config=config,
             )
             return resp.text.strip()
 
