@@ -6,13 +6,15 @@ import json
 import logging
 import re
 import time
+import yaml
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 
-from core.config import get_secret, load_api_config
+from core.config import ROOT, get_secret, load_api_config
+from core.utils import title_matches
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +26,18 @@ Rules:
 - Search only for the exact query provided by the user.
 - Return individual job-posting URLs, not generic search/listing pages.
 - Do not invent companies, titles, locations, dates, or URLs.
-- Prefer current, open postings.
+- Return only current, open postings that the search result itself supports.
+- Do not return expired, closed, archived, no-longer-available, or not-accepting-applications postings.
+- Do not return application workflow pages, saved-job pages, search pages, company profile pages, or generic career pages.
+- Do not return titles that start with "Applying to".
 - The response must be a JSON array of objects with:
   title, company, location, url, source, snippet, confidence.
 """
+
+_SOURCE_URL_PATTERNS = {
+    "linkedin": (r"(^|\.)linkedin\.com$", r"^/jobs/view/\d+"),
+    "stepstone": (r"(^|\.)stepstone\.de$", r"^/stellenangebote--"),
+}
 
 
 @dataclass
@@ -99,6 +109,42 @@ def make_budget(config: dict[str, Any] | None = None) -> AIWebSearchBudget:
 
 def _source_configs(config: dict[str, Any]) -> dict[str, Any]:
     return config.get("sources") or {}
+
+
+def _load_search_config() -> dict[str, Any]:
+    with open(ROOT / "config" / "search_config.yml", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _compact_list(values: Any, limit: int = 20) -> str:
+    if not values:
+        return "none"
+    items = [str(value).strip() for value in values if str(value).strip()]
+    if not items:
+        return "none"
+    shown = items[:limit]
+    suffix = f"; +{len(items) - limit} more" if len(items) > limit else ""
+    return "; ".join(shown) + suffix
+
+
+def build_rule_context(search_config: dict[str, Any], title_filters: list[str], region_config: dict[str, Any]) -> str:
+    exclusion_rules = search_config.get("exclusion_rules", {}) or {}
+    location = region_config.get("location") or region_config.get("name") or ""
+    return "\n".join(
+        [
+            "Filtering rules from search_config.yml:",
+            f"- Required title families: {_compact_list(title_filters)}",
+            f"- Target location/region: {location or 'any'}; allow remote only when the posting says remote.",
+            f"- Reject excluded companies: {_compact_list(search_config.get('excluded_companies', []))}",
+            f"- Reject excluded title terms: {_compact_list(exclusion_rules.get('excluded_title_terms', []))}",
+            f"- Reject seniority flags: {_compact_list(exclusion_rules.get('senior_flags', []))}",
+            f"- Reject stale/closed indicators: {_compact_list(exclusion_rules.get('stale_indicators', []))}",
+            f"- Reject German-language indicators: {_compact_list(exclusion_rules.get('german_indicators', []))}",
+            f"- Reject excluded industries: {_compact_list(exclusion_rules.get('excluded_industries', []))}",
+            f"- Reject URL patterns: {_compact_list(exclusion_rules.get('excluded_url_patterns', []))}",
+            "Return [] if the search result does not clearly satisfy these rules.",
+        ]
+    )
 
 
 def build_queries(title: str, region_config: dict[str, Any], config: dict[str, Any]) -> list[tuple[str, str]]:
@@ -212,11 +258,65 @@ def _parse_json_array(text: str) -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
-def _normalize(item: dict[str, Any], source: str, query: str) -> dict[str, str] | None:
+def _passes_source_url_shape(url: str, source: str) -> bool:
+    patterns = _SOURCE_URL_PATTERNS.get(source)
+    if not patterns:
+        return True
+    host_pattern, path_pattern = patterns
+    parsed = urlparse(url)
+    return (
+        re.search(host_pattern, parsed.netloc, re.IGNORECASE) is not None
+        and re.search(path_pattern, parsed.path, re.IGNORECASE) is not None
+    )
+
+
+def _confidence(item: dict[str, Any]) -> float:
+    try:
+        return float(item.get("confidence", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _looks_stale(item: dict[str, Any], search_config: dict[str, Any]) -> bool:
+    stale_indicators = (
+        (search_config.get("exclusion_rules", {}) or {})
+        .get("stale_indicators", [])
+        or []
+    )
+    if not stale_indicators:
+        return False
+    combined = " ".join(
+        str(item.get(key) or "").lower()
+        for key in ("title", "snippet", "description")
+    )
+    return any(str(marker).lower() in combined for marker in stale_indicators)
+
+
+def _normalize(
+    item: dict[str, Any],
+    source: str,
+    query: str,
+    title_filters: list[str],
+    config: dict[str, Any],
+    search_config: dict[str, Any],
+) -> dict[str, str] | None:
     url = str(item.get("url") or "").strip()
     title = str(item.get("title") or "").strip()
     if not url or not title:
         return None
+    if title.lower().startswith("applying to "):
+        return None
+    if title_filters and not title_matches(title, title_filters):
+        return None
+    if _looks_stale(item, search_config):
+        return None
+    if not _passes_source_url_shape(url, source):
+        return None
+
+    min_confidence = float(config.get("min_confidence", 0.7))
+    if min_confidence > 0 and _confidence(item) < min_confidence:
+        return None
+
     return {
         "title": title,
         "company": str(item.get("company") or "").strip(),
@@ -241,6 +341,7 @@ def fetch_ai_web_search_jobs(
 
     provider, model, max_tokens = _llm_settings()
     budget = make_budget(config)
+    search_config = _load_search_config()
     prompt_delay = float(config.get("prompt_delay_seconds", 5))
     jobs: list[dict[str, str]] = []
     first_prompt = True
@@ -262,6 +363,7 @@ def fetch_ai_web_search_jobs(
 
                 user = (
                     f"Query: {query}\n"
+                    f"{build_rule_context(search_config, title_filters, region_config)}\n"
                     f"Return up to {remaining} current job postings as JSON."
                 )
                 try:
@@ -270,7 +372,7 @@ def fetch_ai_web_search_jobs(
                     normalized = [
                         job
                         for item in _parse_json_array(raw)
-                        if (job := _normalize(item, source, query))
+                        if (job := _normalize(item, source, query, title_filters, config, search_config))
                     ][:remaining]
                 except Exception as exc:
                     logger.warning("[ai-web-search] %s failed for %r: %s", provider, query, exc)

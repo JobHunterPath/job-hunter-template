@@ -580,6 +580,11 @@ Studio. The LLM client retries 429 rate-limit errors and transient 5xx failures
 automatically with exponential backoff, but retries cannot overcome exhausted
 quota.
 
+`http.jd_enrichment` controls best-effort fetching of full job descriptions for
+sparse search snippets. LinkedIn job pages often return HTTP 429 to direct
+fetches, so `linkedin\.com/jobs/` is skipped by default and the pipeline keeps
+the search snippet.
+
 Use the matching secret name:
 
 - Anthropic: `ANTHROPIC_API_KEY`
@@ -662,6 +667,11 @@ Recommended models:
 - Google validation/JD extraction: `gemini-2.5-flash-lite`
 - Google scoring: `gemini-2.5-flash` until Flash Lite score quality is compared on real matches
 - OpenAI: `gpt-4o-mini`
+
+Keep `min_confidence` enabled in `http.search_providers.ai_web_search`. The AI
+web-search prompt includes compact exclusion rules from `config/search_config.yml`
+so low-confidence or irrelevant search results are dropped before
+validation/scoring spends LLM tokens.
 
 To enable it, set:
 

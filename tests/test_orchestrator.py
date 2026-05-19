@@ -76,3 +76,37 @@ def test_hunt_no_new_jobs_is_successful_empty_run():
         code = orchestrator.run(args)
 
     assert code == 0
+
+
+def test_enrich_snippets_skips_configured_throttled_urls():
+    jobs = [
+        {
+            "title": "Product Owner",
+            "company": "LinkedCo",
+            "url": "https://ca.linkedin.com/jobs/view/product-owner-123",
+            "snippet": "short",
+            "source": "AI web search: linkedin",
+        },
+        {
+            "title": "Product Manager",
+            "company": "ExampleCo",
+            "url": "https://example.com/jobs/pm",
+            "snippet": "short",
+            "source": "Brave",
+        },
+    ]
+    api_cfg = {
+        "http": {
+            "jd_enrichment": {
+                "max_workers": 1,
+                "skip_url_patterns": [r"linkedin\.com/jobs/"],
+            }
+        }
+    }
+
+    with patch("pipeline.orchestrator.fetch_jd", return_value={"snippet": "rich description"}) as fetch:
+        enriched = orchestrator._enrich_snippets(jobs, api_cfg)
+
+    fetch.assert_called_once_with("https://example.com/jobs/pm", use_llm=False)
+    assert enriched[0]["snippet"] == "short"
+    assert enriched[1]["snippet"] == "rich description"
