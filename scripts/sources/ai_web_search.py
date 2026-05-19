@@ -250,7 +250,10 @@ def _parse_json_array(text: str) -> list[dict[str, Any]]:
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if not match:
             return []
-        data = json.loads(match.group(0))
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return []
     if isinstance(data, dict):
         data = data.get("jobs", [])
     if not isinstance(data, list):
