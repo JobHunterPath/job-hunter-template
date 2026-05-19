@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.2 - 2026-05-19
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `ac82560` docs: update README and SETUP for JobSpy integration and ATS web search sources
+
+
 ## 2.11.1 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

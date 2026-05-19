@@ -23,6 +23,7 @@ from core.config import RAPIDAPI_KEY
 from core.utils import title_matches
 from sources.ats import fetch_ats_jobs
 from sources.ai_web_search import fetch_ai_web_search_jobs
+from sources.jobspy_source import fetch_jobspy_jobs
 from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
 from sources.search_providers import (
     BraveProvider,
@@ -255,6 +256,12 @@ def scrape(region: Optional[str] = None) -> list[dict]:
             add_job(job, allow_excluded_urls=True)
     except Exception as e:
         logger.warning("[scraper] AI web search failed: %s", e)
+
+    try:
+        for job in fetch_jobspy_jobs(title_filters, enabled_regions, config):
+            add_job(job)
+    except Exception as e:
+        logger.warning("[scraper] JobSpy failed: %s", e)
 
     if not companies:
         logger.warning("[scraper] No companies to scrape. Check search_config.yml")

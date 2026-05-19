@@ -680,15 +680,38 @@ http:
   search_providers:
     ai_web_search:
       enabled: true
-      max_prompts_per_run: 30
-      max_prompts_per_region: 10
+      max_prompts_per_run: 80
+      max_prompts_per_region: 8
       max_results_per_prompt: 8
       max_results_per_region: 30
-      max_total_results_per_run: 60
+      max_total_results_per_run: 120
+      min_confidence: 0.5
 ```
 
-Every result still goes through dedupe, URL verification, JD fetching,
-validation, and scoring before any tailoring or cover-letter generation.
+The default sources (`greenhouse`, `lever`, `ashby`, `generic_web`) target
+well-indexed ATS boards and exclude aggregators. Every result still goes through
+dedupe, URL verification, JD fetching, validation, and scoring before any
+tailoring or cover-letter generation.
+
+### Optional: Enable JobSpy (Indeed + Google Jobs)
+
+`python-jobspy` is installed via `requirements.txt`. Enable it in
+`config/search_config.yml`:
+
+```yaml
+jobspy:
+  enabled: true
+  hours_old: 72          # only return jobs posted within this window
+  results_per_query: 20  # per title × region × source
+  country_indeed_by_region:
+    berlin: germany      # add a row for every region that has an Indeed country code
+    vancouver: canada
+```
+
+Regions with a matching `country_indeed_by_region` entry use both Indeed and
+Google Jobs. Regions without an entry fall back to Google Jobs only. No API key
+is required. JobSpy results go through the same dedupe, URL verification,
+validation, and scoring gates as every other source.
 
 ### Create A Brave Search API Key, Optional
 

@@ -128,12 +128,12 @@ http:
   search_providers:
     ai_web_search:
       enabled: false
-      max_prompts_per_run: 30
-      max_prompts_per_region: 10
+      max_prompts_per_run: 80
+      max_prompts_per_region: 8
       max_results_per_prompt: 8
       max_results_per_region: 30
-      max_total_results_per_run: 60
-      min_confidence: 0.7
+      max_total_results_per_run: 120
+      min_confidence: 0.5
 ```
 
 Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
@@ -141,8 +141,9 @@ Recommended models: `claude-haiku-4-5-20251001` for Anthropic (switch to
 `gemini-2.5-flash-lite` for Google validation/JD extraction,
 `gemini-2.5-flash` or Claude for scoring until you compare score quality, and
 `gpt-4o-mini` for OpenAI.
-LinkedIn and StepStone URLs discovered by AI web search still pass through the
-normal dedupe, URL verification, JD fetching, validation, and scoring gates
+The default sources (`greenhouse`, `lever`, `ashby`, `generic_web`) target
+well-indexed ATS boards and exclude aggregators. Every result still passes
+through dedupe, URL verification, JD fetching, validation, and scoring gates
 before any tailoring or cover-letter generation happens.
 
 AI web search includes compact exclusion rules from `config/search_config.yml`

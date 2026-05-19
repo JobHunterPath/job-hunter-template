@@ -122,9 +122,9 @@ def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
         "max_total_results_per_run": 6,
         "min_confidence": 0.7,
         "sources": {
-            "linkedin": {
+            "greenhouse": {
                 "enabled": True,
-                "query_templates": ['site:linkedin.com/jobs/view "{title}" "{location}"'],
+                "query_templates": ['site:greenhouse.io "{title}" "{location}"'],
             }
         },
     }
@@ -134,7 +134,7 @@ def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
         "title": "Product Owner",
         "company": "LiveCo",
         "location": "Berlin",
-        "url": "https://www.linkedin.com/jobs/view/123456",
+        "url": "https://job-boards.greenhouse.io/liveco/jobs/123456",
         "snippet": "Open product owner role",
         "confidence": 0.9
       },
@@ -142,7 +142,7 @@ def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
         "title": "Applying to Product Owner",
         "company": "ApplyCo",
         "location": "Berlin",
-        "url": "https://www.linkedin.com/jobs/view/234567",
+        "url": "https://job-boards.greenhouse.io/applyco/jobs/234567",
         "snippet": "Application shell",
         "confidence": 0.9
       },
@@ -150,15 +150,15 @@ def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
         "title": "Product Owner",
         "company": "SearchCo",
         "location": "Berlin",
-        "url": "https://www.linkedin.com/jobs/search?keywords=Product%20Owner",
-        "snippet": "Search results page",
+        "url": "https://job-boards.greenhouse.io/searchco",
+        "snippet": "Company listing page, no individual job",
         "confidence": 0.9
       },
       {
         "title": "Product Owner",
         "company": "ClosedCo",
         "location": "Berlin",
-        "url": "https://www.linkedin.com/jobs/view/345678",
+        "url": "https://job-boards.greenhouse.io/closedco/jobs/345678",
         "snippet": "This job is no longer available",
         "confidence": 0.9
       },
@@ -166,7 +166,7 @@ def test_fetch_ai_web_search_jobs_filters_irrelevant_results(monkeypatch):
         "title": "Product Owner",
         "company": "WeakCo",
         "location": "Berlin",
-        "url": "https://www.linkedin.com/jobs/view/567890",
+        "url": "https://job-boards.greenhouse.io/weakco/jobs/567890",
         "snippet": "Maybe a product role",
         "confidence": 0.4
       }

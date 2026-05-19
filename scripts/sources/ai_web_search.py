@@ -35,8 +35,10 @@ Rules:
 """
 
 _SOURCE_URL_PATTERNS = {
-    "linkedin": (r"(^|\.)linkedin\.com$", r"^/jobs/view/\d+"),
-    "stepstone": (r"(^|\.)stepstone\.de$", r"^/stellenangebote--"),
+    # host pattern, path pattern — both must match for the URL to be accepted
+    "greenhouse": (r"greenhouse\.io$", r"/jobs/\d+"),
+    "lever":      (r"^jobs\.lever\.co$", r"^/[^/]+/[0-9a-f-]{36}"),
+    "ashby":      (r"^jobs\.ashbyhq\.com$", r"^/[^/]+/[0-9a-f-]{36}"),
 }
 
 
