@@ -33,7 +33,7 @@ from pipeline.readme_writer import update_readme as write_readme_table
 from pipeline.scorer import filter_matches
 from pipeline.tailorer import tailor
 from pipeline.validator import validate
-from sources.jd_fetcher import fetch_jd
+from sources.jd_fetcher import fetch_jd, jd_from_text
 from sources.scraper import scrape
 from sources.search_providers import canonicalize_url
 from tracking.tracker import filter_new_jobs, load_processed, mark_processed
@@ -122,6 +122,25 @@ def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:
         else:
             logger.warning("  could not fetch JD: %s", url)
     return jobs
+
+
+def _jobs_from_raw_text(
+    text: str,
+    title: str | None,
+    company: str | None,
+    force: bool,
+    existing_urls: set,
+) -> list[dict]:
+    """Build a single job dict from raw pasted JD text."""
+    job = jd_from_text(text, title=title, company=company)
+    if not job:
+        logger.error("[pipeline] Could not parse job from raw text.")
+        return []
+    if not force and job["url"] in existing_urls:
+        logger.info("  [skip] Already processed (use --force to re-tailor): %s", job["url"])
+        return []
+    logger.info("  raw input: %s @ %s", job["title"], job["company"])
+    return [job]
 
 
 def _extract_career_url(job_url: str) -> str | None:
@@ -287,7 +306,7 @@ def _process_jobs(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Job hunt pipeline - hunt or tailor specific links.",
+        description="Job hunt pipeline - hunt or tailor specific links/text.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -295,18 +314,42 @@ Examples:
   python scripts/pipeline/orchestrator.py --region berlin
   python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://url1, https://url2"
   python scripts/pipeline/orchestrator.py --mode tailor-links --skip-score --force
+  python scripts/pipeline/orchestrator.py --mode tailor-raw --jd "$(cat job.txt)"
+  python scripts/pipeline/orchestrator.py --mode tailor-raw --jd - --title "Backend Engineer" --company Acme
         """,
     )
     parser.add_argument(
         "--mode",
-        choices=["hunt", "tailor-links"],
+        choices=["hunt", "tailor-links", "tailor-raw"],
         default="hunt",
-        help="hunt: scrape configured companies (default). tailor-links: process specific URLs.",
+        help=(
+            "hunt: scrape configured companies (default). "
+            "tailor-links: process specific URLs. "
+            "tailor-raw: tailor from pasted job description text."
+        ),
     )
     parser.add_argument(
         "--links",
         metavar="URLS",
         help="Comma-separated job URLs for tailor-links mode. Falls back to TAILOR_LINKS env var.",
+    )
+    parser.add_argument(
+        "--jd",
+        metavar="TEXT",
+        help=(
+            "Raw job description text for tailor-raw mode. "
+            "Pass '-' to read from stdin."
+        ),
+    )
+    parser.add_argument(
+        "--title",
+        metavar="TITLE",
+        help="Job title override for tailor-raw mode (skips LLM title extraction).",
+    )
+    parser.add_argument(
+        "--company",
+        metavar="COMPANY",
+        help="Company name override for tailor-raw mode (skips LLM company extraction).",
     )
     parser.add_argument(
         "--region",
@@ -350,7 +393,7 @@ def run(args: argparse.Namespace) -> int:
         logger.info("[pipeline] Step 1b: Enriching sparse job descriptions...")
         jobs = _enrich_snippets(jobs, api_cfg)
 
-    else:
+    elif args.mode == "tailor-links":
         raw_links = args.links or os.environ.get("TAILOR_LINKS", "")
         if not raw_links:
             logger.error(
@@ -363,6 +406,23 @@ def run(args: argparse.Namespace) -> int:
         jobs = _jobs_from_links(raw_links, args.force, existing_urls)
         if not jobs:
             logger.warning("[pipeline] No jobs fetched. Exiting.")
+            return 2
+
+    else:  # tailor-raw
+        raw_jd = args.jd
+        if not raw_jd:
+            logger.error(
+                "[pipeline] No job description provided. "
+                "Use --jd 'TEXT' or --jd - to read from stdin."
+            )
+            return 1
+        if raw_jd == "-":
+            raw_jd = sys.stdin.read()
+        existing_urls, existing_titles = load_processed()
+        logger.info("[pipeline] Step 1: Parsing raw job description...")
+        jobs = _jobs_from_raw_text(raw_jd, args.title, args.company, args.force, existing_urls)
+        if not jobs:
+            logger.warning("[pipeline] No jobs parsed. Exiting.")
             return 2
 
     logger.info("[pipeline] %s job(s) ready for processing", len(jobs))
