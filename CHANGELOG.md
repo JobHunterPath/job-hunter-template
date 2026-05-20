@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.2 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `6c2e80c` fix(workflow): quote title/company args with bash array in tailor_raw.yml
+
+
 ## 2.12.1 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
