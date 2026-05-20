@@ -8,8 +8,9 @@ import logging
 import re
 import yaml
 
-from core.config import ROOT, load_api_config, profile_path
+from core.config import ROOT, profile_path
 from core.llm_client import get_llm_client
+from core.llm_utils import get_llm_role_settings
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +145,7 @@ def tailor(match_result: dict) -> str:
     story_bank_limit = int(stories_cfg.get("max_chars_for_tailoring", 16000))
     project_rules = _build_project_rules(tailoring_cfg, BASE_TEX, story_bank)
 
-    api_cfg = load_api_config()
-    llm = api_cfg.get("llm", {})
-    model = llm.get("models", {}).get("tailoring", "claude-sonnet-4-6")
-    max_tokens = llm.get("max_tokens", {}).get("tailoring", 4000)
+    settings = get_llm_role_settings("tailoring")
 
     prompt = PROMPT.format(
         keywords=keywords,
@@ -162,8 +160,8 @@ def tailor(match_result: dict) -> str:
         tailored_text = get_llm_client("tailoring").complete(
             system=SYSTEM,
             user=prompt,
-            model=model,
-            max_tokens=max_tokens,
+            model=settings.model,
+            max_tokens=settings.max_tokens,
         )
         logger.info(f"[tailor] Tailored for {job.get('title', '?')} @ {job.get('company', '?')}")
 

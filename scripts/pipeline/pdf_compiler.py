@@ -8,10 +8,33 @@ Docker texlive container for local Windows runs.
 import os
 import shutil
 import subprocess
+import threading
 
 from core.config import profile_path
 
-# scripts/pipeline/ → scripts/ → repo root
+_TEXLIVE_IMAGE = "texlive/texlive:latest"
+_DOCKER_PULL_LOCK = threading.Lock()
+_docker_image_pulled = False
+
+
+def _ensure_texlive_image() -> None:
+    global _docker_image_pulled
+
+    if _docker_image_pulled:
+        return
+
+    with _DOCKER_PULL_LOCK:
+        if _docker_image_pulled:
+            return
+
+        print("  [compile] Pulling texlive Docker image (first run may take several minutes)...")
+        subprocess.run(
+            ["docker", "pull", _TEXLIVE_IMAGE],
+            timeout=600,
+        )
+        _docker_image_pulled = True
+
+
 def compile_tex(tex_path: str, output_dir: str) -> str | None:
     """
     Compile a .tex file to PDF.
@@ -25,7 +48,7 @@ def compile_tex(tex_path: str, output_dir: str) -> str | None:
     """
     # Copy image and class file dependencies into output dir so pdflatex finds them
     for src in (
-        profile_path("profile_image", "profile-placeholder.png"),
+        profile_path("profile_image", ""),
         profile_path("latex_class", "altacv.cls"),
     ):
         if src.exists():
@@ -43,18 +66,12 @@ def compile_tex(tex_path: str, output_dir: str) -> str | None:
         ]
         timeout = 120
     else:
-        # Local Windows: run via Docker texlive image
-        print("  [compile] Pulling texlive Docker image (first run may take several minutes)...")
-        subprocess.run(
-            ["docker", "pull", "texlive/texlive:latest"],
-            timeout=600,
-        )
-
+        _ensure_texlive_image()
         container_tex = f"/workspace/{os.path.basename(abs_tex_path)}"
         cmd = [
             "docker", "run", "--rm",
             "-v", f"{abs_output_dir}:/workspace",
-            "texlive/texlive:latest",
+            _TEXLIVE_IMAGE,
             "pdflatex",
             "-interaction=nonstopmode",
             "-output-directory", "/workspace",

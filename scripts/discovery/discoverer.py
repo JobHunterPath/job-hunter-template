@@ -9,8 +9,8 @@ import re
 import json
 import yaml
 
-from core.config import load_api_config
 from core.llm_client import get_llm_client
+from core.llm_utils import get_llm_role_settings
 from sources.search_providers import search_career_urls, search_web
 
 # scripts/discovery/ → scripts/ → repo root
@@ -192,13 +192,11 @@ def discover_company_names(existing: list[dict], location: str, job_titles: list
         prompt = spec["prompt"].format(existing=existing_names)
         print(f"[discover] Querying sector: {spec['sector']}...")
         try:
-            _llm = load_api_config().get("llm", {})
-            _model = _llm.get("models", {}).get("discovery", "claude-sonnet-4-6")
-            _max_tokens = _llm.get("max_tokens", {}).get("discovery", 400)
+            settings = get_llm_role_settings("discovery")
             raw = get_llm_client("discovery").complete(
                 user=prompt,
-                model=_model,
-                max_tokens=_max_tokens,
+                model=settings.model,
+                max_tokens=settings.max_tokens,
             )
             names = json.loads(raw)
             added = 0

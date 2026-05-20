@@ -12,8 +12,8 @@ or care which SDK is underneath. Configure per pipeline role in api_config.yml:
       validation:   anthropic      # cheap/fast bulk calls
       tailoring:    openai         # override per role
     models:
-      validation:   claude-haiku-4-5-20251001
-      tailoring:    gpt-4o
+      validation:   provider-model-name
+      tailoring:    provider-model-name
 
 Use get_llm_client(role) wherever a model call is needed.
 """
@@ -22,11 +22,8 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import ClassVar
 
 logger = logging.getLogger(__name__)
-
-_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -201,6 +198,7 @@ class LLMClient:
 # ── Factory with per-provider caching ─────────────────────────────────────────
 
 _cache: dict[str, LLMClient] = {}
+_cache_lock = threading.Lock()
 
 
 def get_llm_client(role: str) -> LLMClient:
@@ -225,30 +223,31 @@ def get_llm_client(role: str) -> LLMClient:
         or llm.get("default_provider", "anthropic")
     )
 
-    if provider in _cache:
-        return _cache[provider]
+    with _cache_lock:
+        if provider in _cache:
+            return _cache[provider]
 
-    secrets = cfg.get("secrets", {})
-    provider_cfg = secrets.get(provider, {})
+        secrets = cfg.get("secrets", {})
+        provider_cfg = secrets.get(provider, {})
 
-    if provider == "ollama":
-        api_key = ""
-        base_url = cfg.get("ollama", {}).get("base_url", "http://localhost:11434")
-    else:
-        env_var = provider_cfg.get("env_var", "")
-        required = provider_cfg.get("required", False)
-        api_key = get_secret(env_var, required=required) if env_var else ""
-        base_url = ""
+        if provider == "ollama":
+            api_key = ""
+            base_url = cfg.get("ollama", {}).get("base_url", "http://localhost:11434")
+        else:
+            env_var = provider_cfg.get("env_var", "")
+            required = provider_cfg.get("required", False)
+            api_key = get_secret(env_var, required=required) if env_var else ""
+            base_url = ""
 
-    rate_cfg = llm.get("rate_limits", {}).get(provider, {}) or {}
-    requests_per_minute = int(rate_cfg.get("requests_per_minute", 0) or 0)
+        rate_cfg = llm.get("rate_limits", {}).get(provider, {}) or {}
+        requests_per_minute = int(rate_cfg.get("requests_per_minute", 0) or 0)
 
-    logger.info(f"[llm] Initialising {provider} client (role: {role})")
-    client = LLMClient(
-        provider,
-        api_key=api_key,
-        base_url=base_url,
-        requests_per_minute=requests_per_minute,
-    )
-    _cache[provider] = client
-    return client
+        logger.info(f"[llm] Initialising {provider} client (role: {role})")
+        client = LLMClient(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            requests_per_minute=requests_per_minute,
+        )
+        _cache[provider] = client
+        return client

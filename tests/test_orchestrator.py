@@ -142,3 +142,68 @@ def test_enrich_snippets_skips_configured_throttled_urls():
     fetch.assert_called_once_with("https://example.com/jobs/pm", use_llm=False)
     assert enriched[0]["snippet"] == "short"
     assert enriched[1]["snippet"] == "rich description"
+
+
+def test_enrich_snippets_keeps_original_when_fetch_raises():
+    jobs = [
+        {
+            "title": "Product Manager",
+            "company": "ExampleCo",
+            "url": "https://example.com/jobs/pm",
+            "snippet": "short",
+            "source": "Brave",
+        },
+        {
+            "title": "Senior Product Manager",
+            "company": "OtherCo",
+            "url": "https://other.example/jobs/spm",
+            "snippet": "short",
+            "source": "Brave",
+        },
+    ]
+    api_cfg = {"http": {"jd_enrichment": {"max_workers": 1, "skip_url_patterns": []}}}
+
+    def fetch(url, use_llm=False):
+        if "example.com/jobs/pm" in url:
+            raise RuntimeError("temporary fetch failure")
+        return {"snippet": "rich description"}
+
+    with patch("pipeline.orchestrator.fetch_jd", side_effect=fetch):
+        enriched = orchestrator._enrich_snippets(jobs, api_cfg)
+
+    assert enriched[0]["snippet"] == "short"
+    assert enriched[1]["snippet"] == "rich description"
+    assert [job["url"] for job in enriched] == [job["url"] for job in jobs]
+
+
+def test_drop_dead_urls_before_enrichment_uses_injected_checker_in_order():
+    jobs = [
+        {"title": "PM 1", "company": "A", "url": "https://example.com/1"},
+        {"title": "PM 2", "company": "B", "url": "https://example.com/dead"},
+        {"title": "PM 3", "company": "C", "url": "https://example.com/3"},
+    ]
+    calls = []
+    api_cfg = {
+        "llm": {"max_workers": 2},
+        "http": {"url_verification": {"enabled": True, "timeout_seconds": 5, "max_workers": 2}},
+    }
+
+    def checker(url: str, timeout: int) -> bool:
+        calls.append((url, timeout))
+        return "dead" not in url
+
+    alive = orchestrator.drop_dead_urls_before_enrichment(
+        jobs,
+        api_cfg,
+        url_checker=checker,
+    )
+
+    assert [job["url"] for job in alive] == [
+        "https://example.com/1",
+        "https://example.com/3",
+    ]
+    assert sorted(calls) == [
+        ("https://example.com/1", 5),
+        ("https://example.com/3", 5),
+        ("https://example.com/dead", 5),
+    ]

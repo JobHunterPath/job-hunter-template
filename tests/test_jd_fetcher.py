@@ -76,6 +76,28 @@ class TestFetchJd:
         assert result["snippet"] == "Full job description."
         assert result["source"] == "direct_link"
 
+    def test_accepts_fenced_json_with_preamble(self):
+        raw = f"Parsed:\n```json\n{LLM_JSON}\n```"
+        with patch("sources.jd_fetcher._fetch_html", return_value=RICH_HTML), \
+             patch("sources.jd_fetcher.get_llm_client", return_value=_mock_llm(raw)):
+            result = jd_fetcher.fetch_jd(SAMPLE_URL)
+
+        assert result is not None
+        assert result["title"] == "Senior Product Manager"
+        assert result["company"] == "TestCorp"
+
+    def test_accepts_json_with_trailing_extra_data(self):
+        raw = f'{LLM_JSON}\n{{"note": "ignored trailing object"}}'
+        with patch("sources.jd_fetcher._fetch_html", return_value=RICH_HTML), \
+             patch("sources.jd_fetcher.get_llm_client", return_value=_mock_llm(raw)):
+            result = jd_fetcher.fetch_jd(
+                "https://jobs.infineon.com/careers/job/563808970725337?domain=infineon.com&hl=en"
+            )
+
+        assert result is not None
+        assert result["title"] == "Senior Product Manager"
+        assert result["company"] == "TestCorp"
+
     def test_returns_none_when_fetch_fails(self):
         with patch("sources.jd_fetcher._fetch_html", return_value=None):
             assert jd_fetcher.fetch_jd(SAMPLE_URL) is None

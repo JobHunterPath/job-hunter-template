@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from dataclasses import dataclass
 from html import unescape
 from typing import Optional
@@ -59,6 +60,7 @@ TRACKING_QUERY_KEYS = {
 }
 TRACKING_QUERY_PREFIXES = ("utm_",)
 _PROVIDER_FAILURES: dict[str, int] = {}
+_PROVIDER_FAILURES_LOCK = threading.Lock()
 
 
 @dataclass
@@ -160,6 +162,23 @@ def normalize_web_results(raw: list[dict], source: str) -> list[SearchResult]:
     return results
 
 
+def _provider_failure_count(name: str) -> int:
+    with _PROVIDER_FAILURES_LOCK:
+        return _PROVIDER_FAILURES.get(name, 0)
+
+
+def _reset_provider_failure(name: str) -> None:
+    with _PROVIDER_FAILURES_LOCK:
+        _PROVIDER_FAILURES[name] = 0
+
+
+def _record_provider_failure(name: str) -> int:
+    with _PROVIDER_FAILURES_LOCK:
+        failures = _PROVIDER_FAILURES.get(name, 0) + 1
+        _PROVIDER_FAILURES[name] = failures
+        return failures
+
+
 class SearxngProvider(SearchProvider):
     name = "searxng"
 
@@ -218,7 +237,7 @@ class BraveProvider(SearchProvider):
                 "X-Subscription-Token": BRAVE_API_KEY,
             },
             params=params,
-            timeout=_timeout("brave_search"),
+            timeout=_timeout("search_providers"),
         )
         resp.raise_for_status()
         return normalize_web_results(resp.json().get("web", {}).get("results", []), "Brave")
@@ -239,7 +258,7 @@ class TavilyProvider(SearchProvider):
             "include_answer": False,
             "include_raw_content": False,
         }
-        resp = requests.post(TAVILY_URL, json=payload, timeout=_timeout("brave_search"))
+        resp = requests.post(TAVILY_URL, json=payload, timeout=_timeout("search_providers"))
         resp.raise_for_status()
         return normalize_web_results(resp.json().get("results", []), "Tavily")
 
@@ -261,7 +280,7 @@ class ExaProvider(SearchProvider):
             EXA_URL,
             json=payload,
             headers={"x-api-key": EXA_API_KEY, "Content-Type": "application/json"},
-            timeout=_timeout("brave_search"),
+            timeout=_timeout("search_providers"),
         )
         resp.raise_for_status()
         raw = []
@@ -278,15 +297,7 @@ class SearchRouter:
     """Tries enabled search providers in configured order."""
 
     def __init__(self, providers: Optional[list[SearchProvider]] = None) -> None:
-        available = {
-            "searxng": SearxngProvider(),
-            "brave": BraveProvider(),
-            "tavily": TavilyProvider(),
-            "exa": ExaProvider(),
-        }
-        order = _search_cfg().get("order") or list(available)
-        ordered = [available[name] for name in order if name in available]
-        self.providers = providers if providers is not None else ordered
+        self.providers = providers if providers is not None else _providers_from_order(_provider_order())
         self.max_consecutive_failures = int(
             _search_cfg().get("max_consecutive_failures", 3)
         )
@@ -294,7 +305,7 @@ class SearchRouter:
     def _is_suppressed(self, provider: SearchProvider) -> bool:
         if self.max_consecutive_failures <= 0:
             return False
-        failures = _PROVIDER_FAILURES.get(provider.name, 0)
+        failures = _provider_failure_count(provider.name)
         if failures < self.max_consecutive_failures:
             return False
         logger.warning(
@@ -315,13 +326,12 @@ class SearchRouter:
             try:
                 logger.info("[search] %s: %s", provider.name, query[:80])
                 results = provider.search(query, region_config, count=count)
-                _PROVIDER_FAILURES[provider.name] = 0
+                _reset_provider_failure(provider.name)
                 if results:
                     all_results.extend(results)
                     break
             except Exception as exc:
-                failures = _PROVIDER_FAILURES.get(provider.name, 0) + 1
-                _PROVIDER_FAILURES[provider.name] = failures
+                failures = _record_provider_failure(provider.name)
                 logger.warning(
                     "[search] %s failed (%s/%s): %s",
                     provider.name,
@@ -336,13 +346,25 @@ class ProviderSearchRouter(SearchRouter):
     """Search router constrained to a caller-provided provider name order."""
 
     def __init__(self, provider_names: list[str]) -> None:
-        available = {
-            "searxng": SearxngProvider(),
-            "brave": BraveProvider(),
-            "tavily": TavilyProvider(),
-            "exa": ExaProvider(),
-        }
-        super().__init__([available[name] for name in provider_names if name in available])
+        super().__init__(_providers_from_order(provider_names))
+
+
+def _provider_registry() -> dict[str, SearchProvider]:
+    return {
+        "searxng": SearxngProvider(),
+        "brave": BraveProvider(),
+        "tavily": TavilyProvider(),
+        "exa": ExaProvider(),
+    }
+
+
+def _provider_order() -> list[str]:
+    return list(_search_cfg().get("order") or _provider_registry())
+
+
+def _providers_from_order(provider_names: list[str]) -> list[SearchProvider]:
+    available = _provider_registry()
+    return [available[name] for name in provider_names if name in available]
 
 
 def search_web(query: str, region_config: dict, count: int = 10) -> list[dict]:
@@ -444,19 +466,32 @@ def discover_ats_jobs_by_search(
         return []
 
     max_results_per_query = int(cfg.get("results_per_query", 10))
+    max_queries_per_region = int(cfg.get("max_queries_per_region", 0) or 0)
+    max_total_queries = int(cfg.get("max_total_queries", 0) or 0)
     sources = cfg.get("sources") or list(_ATS_DISCOVERY_SITES)
-    router = ProviderSearchRouter(provider_order or _search_cfg().get("order") or ["searxng", "brave", "tavily", "exa"])
+    router = ProviderSearchRouter(provider_order or _provider_order())
     jobs: list[dict] = []
     seen: set[str] = set()
+    total_queries = 0
 
     for region_name, region_config in regions.items():
+        region_queries = 0
         location = region_config.get("location") or region_name
         for title in title_filters:
             for source in sources:
                 if source not in _ATS_DISCOVERY_SITES:
                     continue
+                if max_queries_per_region > 0 and region_queries >= max_queries_per_region:
+                    logger.info("[search-discovery] query cap reached for region=%s", region_name)
+                    break
+                if max_total_queries > 0 and total_queries >= max_total_queries:
+                    logger.info("[search-discovery] total query cap reached")
+                    logger.info("[search-discovery] complete: %s jobs found", len(jobs))
+                    return jobs
                 site_query, _, _ = _ATS_DISCOVERY_SITES[source]
                 query = f'({site_query}) "{title}" "{location}"'
+                region_queries += 1
+                total_queries += 1
                 for result in router.search(query, region_config, count=max_results_per_query):
                     if not _passes_ats_discovery_shape(result.url, source):
                         continue

@@ -78,9 +78,7 @@ http:
   url_verification:
     enabled: true
     timeout_seconds: 5
-  brave_search:
-    timeout_seconds: 15
-    results_per_query: 10
+    max_workers: 5
   search_providers:
     timeout_seconds: 10
     max_consecutive_failures: 3
@@ -93,6 +91,9 @@ http:
     ats_discovery:
       enabled: true
       results_per_query: 10
+      # 0 means unlimited. Use these caps to constrain region x title x source query growth.
+      max_queries_per_region: 0
+      max_total_queries: 0
       sources:
         - greenhouse
         - lever
@@ -105,6 +106,8 @@ http:
     ai_web_search:
       enabled: false
       # Queries are title + region only; company names are never included.
+      # 0 preserves old behavior. Set above 0 to skip AI search when earlier sources find enough jobs.
+      run_if_fewer_than_jobs: 0
       prompt_delay_seconds: 3         # pause between prompts to avoid overloading the web-search endpoint
       max_prompts_per_run: 80
       max_prompts_per_region: 8
@@ -169,6 +172,6 @@ profile:
   resume_tex: "resume_double_column.tex"
   story_bank: "story_bank.md"
   project_instructions: "project_instructions.md"
-  profile_image: "profile-placeholder.png"
+  profile_image: ""
   latex_class: "altacv.cls"
   output_dir: "jobs"

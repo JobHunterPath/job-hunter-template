@@ -82,6 +82,75 @@ def test_score_api_error():
 
 # ── filter_matches() ─────────────────────────────────────────────────────────
 
+def test_build_scoring_resume_context_compacts_latex_noise():
+    resume = r"""
+% hidden draft bullet
+\documentclass{article}
+\usepackage{hyperref}
+\begin{document}
+\section{Summary}
+Product manager with roadmapping and stakeholder leadership.
+\textbf{Skills}: agile, discovery, analytics
+\end{document}
+"""
+    config = {
+        "scoring": {
+            "prompt_context": {
+                "resume_mode": "compact_text",
+                "resume_max_chars": 200,
+            }
+        }
+    }
+
+    context = scorer.build_scoring_resume_context(resume, config)
+
+    assert "hidden draft bullet" not in context
+    assert "documentclass" not in context
+    assert "Product manager with roadmapping" in context
+    assert "agile, discovery, analytics" in context
+
+
+def test_score_uses_configured_resume_and_jd_context_caps(monkeypatch):
+    payload = json.dumps({
+        'score': 85,
+        'matched_keywords': ['agile'],
+        'gaps': [],
+        'years_exp_required': 3,
+    })
+    captured = {}
+
+    def complete(**kwargs):
+        captured.update(kwargs)
+        return payload
+
+    mock = MagicMock()
+    mock.complete.side_effect = complete
+    config = {
+        "scoring": {
+            "prompt_context": {
+                "resume_mode": "compact_text",
+                "resume_max_chars": 80,
+                "job_description_max_chars": 12,
+            }
+        }
+    }
+
+    monkeypatch.setattr(
+        scorer,
+        "BASE_RESUME",
+        r"\documentclass{article}\begin{document}Roadmapping and agile leadership\end{document}",
+    )
+
+    with patch('pipeline.scorer.get_llm_client', return_value=mock):
+        result = scorer.score({**JOB, "snippet": "ABCDEFGHIJKLMNO"}, config)
+
+    assert result["score"] == 85
+    prompt = captured["user"]
+    assert "Roadmapping and agile leadership" in prompt
+    assert "ABCDEFGHIJKL" in prompt
+    assert "MNO" not in prompt
+
+
 def _score_result(score_val, years=3, company='TestCo'):
     job = {**JOB, 'company': company}
     return {'score': score_val, 'matched_keywords': [], 'gaps': [], 'years_exp_required': years, 'job': job}

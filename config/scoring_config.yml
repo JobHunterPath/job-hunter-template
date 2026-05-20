@@ -5,6 +5,10 @@ scoring:
     - company: "Example Strategic Company"
       reason: "High-priority target company"
       min_score_override: 65
+  prompt_context:
+    resume_mode: compact_text
+    resume_max_chars: 4500
+    job_description_max_chars: 5000
 
 benchmarking:
   enabled: true
