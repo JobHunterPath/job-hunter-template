@@ -252,7 +252,16 @@ jobs:
             -name cover_letter.pdf \
           \) -print0 | xargs -0 -r git add --
           git diff --staged --quiet || git commit -m "jobs(${{ steps.hunt_region.outputs.label }}): $(date +%Y-%m-%d)"
-          git pull --rebase origin main
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main; then
+              break
+            fi
+            git rebase --abort
+            python3 scripts/pipeline/merge_tracker.py
+            git checkout origin/main -- README.md 2>/dev/null || true
+            git add config/applied_jobs.yml config/discovery_cache.yml README.md
+            git commit --amend --no-edit
+          done
           git push
 
   # ── Weekly company discovery ────────────────────────────────────────────────
