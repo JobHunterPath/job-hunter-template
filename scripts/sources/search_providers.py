@@ -606,7 +606,8 @@ def fetch_playwright_career_jobs(
         browser = pw.chromium.launch(headless=True)
         try:
             page = browser.new_page(user_agent=USER_AGENT)
-            page.goto(url, wait_until="networkidle", timeout=20_000)
+            pw_timeout = int(get_timeout("playwright") * 1000)
+            page.goto(url, wait_until="networkidle", timeout=pw_timeout)
             html = page.content()
             return extract_jobs_from_html(
                 html,

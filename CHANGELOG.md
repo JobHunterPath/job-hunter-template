@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.6 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `5db485c` perf(pipeline): fix SearXNG on GH Actions, cache image, tune timeouts
+
+
 ## 2.11.5 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
