@@ -155,6 +155,10 @@ http:
             - '"{title}" "{location}" job apply -site:glassdoor.com -site:indeed.com -site:linkedin.com -site:monster.com -site:xing.com -site:stepstone.de'
   ats_scraper:
     timeout_seconds: 10
+
+  playwright:
+    timeout_seconds: 10
+
   jd_enrichment:
     # Full JD fetching is best-effort. Some hosts, especially LinkedIn, throttle
     # direct scraping aggressively; keep their search snippets instead.

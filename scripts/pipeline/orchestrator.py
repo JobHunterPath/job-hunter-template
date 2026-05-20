@@ -35,6 +35,7 @@ from pipeline.tailorer import tailor
 from pipeline.validator import validate
 from sources.jd_fetcher import fetch_jd
 from sources.scraper import scrape
+from sources.search_providers import canonicalize_url
 from tracking.tracker import filter_new_jobs, load_processed, mark_processed
 
 logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -79,7 +80,18 @@ def _jobs_from_hunt(region: str | None = None) -> tuple[list[dict], set, set]:
     if not jobs:
         return [], set(), set()
     new_jobs, existing_urls, existing_titles = filter_new_jobs(jobs)
-    return new_jobs, existing_urls, existing_titles
+    seen_canonical: set[str] = set()
+    deduped: list[dict] = []
+    for job in new_jobs:
+        c = canonicalize_url(job.get("url", ""))
+        if not c or c not in seen_canonical:
+            if c:
+                seen_canonical.add(c)
+            deduped.append(job)
+    dropped = len(new_jobs) - len(deduped)
+    if dropped:
+        logger.info("[pipeline] Dropped %s canonical-URL duplicate(s) before enrichment", dropped)
+    return deduped, existing_urls, existing_titles
 
 
 def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:

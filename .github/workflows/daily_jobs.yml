@@ -128,6 +128,24 @@ jobs:
         if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
         run: playwright install chromium --with-deps
 
+      - name: Cache SearXNG image
+        if: steps.hunt_region.outputs.should_run == 'true'
+        uses: actions/cache@v5
+        with:
+          path: /tmp/searxng.tar
+          key: searxng-${{ hashFiles('.github/searxng/settings.yml') }}
+
+      - name: Load or pull SearXNG image
+        if: steps.hunt_region.outputs.should_run == 'true'
+        run: |
+          if [ -f /tmp/searxng.tar ]; then
+            echo "Loading SearXNG from cache"
+            docker load -i /tmp/searxng.tar
+          else
+            docker pull ghcr.io/searxng/searxng:latest
+            docker save ghcr.io/searxng/searxng:latest -o /tmp/searxng.tar
+          fi
+
       - name: Start SearXNG
         if: steps.hunt_region.outputs.should_run == 'true'
         run: |
@@ -285,6 +303,22 @@ jobs:
       - name: Install Python dependencies
         if: steps.runner_image.outputs.available != 'true'
         run: pip install -r requirements.txt
+
+      - name: Cache SearXNG image
+        uses: actions/cache@v5
+        with:
+          path: /tmp/searxng.tar
+          key: searxng-${{ hashFiles('.github/searxng/settings.yml') }}
+
+      - name: Load or pull SearXNG image
+        run: |
+          if [ -f /tmp/searxng.tar ]; then
+            echo "Loading SearXNG from cache"
+            docker load -i /tmp/searxng.tar
+          else
+            docker pull ghcr.io/searxng/searxng:latest
+            docker save ghcr.io/searxng/searxng:latest -o /tmp/searxng.tar
+          fi
 
       - name: Start SearXNG
         run: |
