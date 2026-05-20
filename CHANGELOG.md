@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.0 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `00c4808` feat(tailor): add tailor-raw mode to accept pasted job description text
+
+
 ## 2.11.6 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.

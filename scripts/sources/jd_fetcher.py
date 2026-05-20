@@ -1,5 +1,5 @@
 """
-Fetch and parse a job description from a raw URL.
+Fetch and parse a job description from a raw URL or pasted text.
 
 Extracts the job title, company name, and description text using a staged pipeline:
   1. HTTP GET the page and strip HTML to plain text.
@@ -11,6 +11,7 @@ Playwright is optional — install it only when needed:
   python -m pip install playwright && playwright install chromium
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -223,4 +224,41 @@ def fetch_jd(url: str, use_llm: bool = True) -> Optional[dict]:
         "snippet": description,
         "posted": "",
         "source": "direct_link",
+    }
+
+
+def jd_from_text(
+    text: str,
+    *,
+    title: Optional[str] = None,
+    company: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Build a pipeline-compatible job dict from raw pasted job description text.
+
+    Uses LLM extraction to infer title and company when not supplied.
+    Returns None if the text is empty or yields no usable description.
+    """
+    if not text or not text.strip():
+        return None
+
+    if not title or not company:
+        extracted = _normalize_extracted_job(_llm_extract(text, "raw_text"))
+        title = title or extracted.get("title") or "Unknown Role"
+        company = company or extracted.get("company") or "Unknown Company"
+        description = extracted.get("description") or text[:4000]
+    else:
+        description = text[:4000]
+
+    if not description.strip():
+        return None
+
+    uid = hashlib.sha1(text.encode()).hexdigest()[:12]
+    return {
+        "title": title,
+        "company": company,
+        "url": f"raw://{uid}",
+        "snippet": description,
+        "posted": "",
+        "source": "raw_text",
     }
