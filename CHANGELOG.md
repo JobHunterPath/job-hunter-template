@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.5 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `6da6d11` fix(template-update): merge template history into clones
+
+
 ## 2.12.4 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
