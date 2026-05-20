@@ -61,6 +61,43 @@ def test_score_valid_response():
     assert result['job'] is JOB
 
 
+def test_score_requests_json_response_format():
+    payload = json.dumps({
+        'score': 85,
+        'matched_keywords': ['agile'],
+        'gaps': [],
+        'years_exp_required': 3,
+    })
+    mock = _mock_client(payload)
+
+    with patch('pipeline.scorer.get_llm_client', return_value=mock):
+        result = scorer.score(JOB, CONFIG)
+
+    assert result['score'] == 85
+    assert mock.complete.call_args.kwargs["response_format"] == "json"
+
+
+def test_score_repairs_malformed_json_once():
+    mock = MagicMock()
+    mock.complete.side_effect = [
+        '{"score": 85, "matched_keywords": ["Git',
+        json.dumps({
+            'score': 85,
+            'matched_keywords': ['Git'],
+            'gaps': [],
+            'years_exp_required': None,
+        }),
+    ]
+
+    with patch('pipeline.scorer.get_llm_client', return_value=mock):
+        result = scorer.score(JOB, CONFIG)
+
+    assert result['score'] == 85
+    assert result['matched_keywords'] == ['Git']
+    assert mock.complete.call_count == 2
+    assert "Convert this model response into valid JSON" in mock.complete.call_args.kwargs["user"]
+
+
 def test_score_json_parse_error():
     with patch('pipeline.scorer.get_llm_client', return_value=_mock_client('not json')):
         result = scorer.score(JOB, CONFIG)

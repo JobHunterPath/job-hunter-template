@@ -642,8 +642,225 @@ Use this if `config/api_config.yml` uses `google`.
 GOOGLE_API_KEY
 ```
 
-Ollama can work locally, but GitHub-hosted Actions cannot use Ollama running on
-your laptop. Use Anthropic, OpenAI, or Google for scheduled GitHub Actions.
+### Optional: Run Local Models With Ollama
+
+Use this when cloud free tiers are too restrictive. Google Gemini free-tier
+quota can be exhausted quickly during validation and scoring because those roles
+run once per job. A practical setup is to run high-volume roles locally through
+Ollama and keep low-volume, quality-sensitive roles on Anthropic/OpenAI.
+
+Ollama runs at `http://localhost:11434` and the pipeline uses its
+OpenAI-compatible API. No API key is required for local Ollama. GitHub-hosted
+Actions cannot reach an Ollama server running on your laptop, so local Ollama is
+for local runs only unless you run a self-hosted runner on the same machine or
+network.
+
+Official references:
+
+- Install and docs: `https://docs.ollama.com/`
+- OpenAI-compatible API: `https://docs.ollama.com/openai`
+- Model library: `https://ollama.com/search`
+
+#### Pick A Model For Your Hardware
+
+There is no laptop-sized model that is truly equivalent to Claude Sonnet for
+resume tailoring quality. Treat the options below as practical local substitutes
+ranked by hardware. The model size listed by Ollama is the downloaded quantized
+size; leave extra RAM/VRAM for the operating system, Python, browser rendering,
+and LaTeX.
+
+| Hardware | Good first model | Better model if it fits | Best use in this pipeline |
+|---|---|---|---|
+| 16 GB RAM, CPU-only or small GPU | `gpt-oss:20b` or `qwen3:8b` | `mistral-small:24b` only if memory pressure is low | validation, JD extraction, light scoring |
+| 24-32 GB RAM or 16-32 GB unified memory | `mistral-small:24b` | `qwen3:30b` | validation, scoring, JD extraction |
+| 32-64 GB RAM or 16-24 GB VRAM | `qwen3:30b` | `qwen3-coder:30b`, `qwen2.5-coder:32b`, `deepseek-r1:32b` | scoring, coding-heavy JD interpretation |
+| 64 GB+ RAM or 48 GB+ VRAM | `llama3.3:70b` | `deepseek-r1:70b` | closest local general-purpose substitute for Sonnet, but slower |
+| 80 GB GPU or very large unified memory | `gpt-oss:120b` | `qwen3-coder:480b` only on very large machines/cloud | closest local high-end option |
+
+Model notes from Ollama's library:
+
+- `gpt-oss:20b` is 14 GB and is designed to run on systems with as little as
+  16 GB memory; `gpt-oss:120b` is 65 GB and targets a single 80 GB GPU.
+- `mistral-small:24b` is 14 GB and Mistral describes it as fitting a single RTX
+  4090 or a 32 GB RAM MacBook once quantized.
+- `qwen3:30b` and `qwen3-coder:30b` are 19 GB; Qwen3-Coder is better for code
+  and repository-style reasoning.
+- `llama3.3:70b` and `deepseek-r1:70b` are 43 GB; expect slower local runs
+  unless you have strong GPU acceleration.
+
+For CPU-only machines, start with `llm.max_workers: 1`. On Apple Silicon with
+32 GB+ unified memory or an NVIDIA GPU with enough VRAM, try `max_workers: 2`.
+Avoid `max_workers: 5` with local models until you have measured memory use.
+
+#### Install And Pull A Model
+
+Install Ollama from `https://ollama.com/download`, then open a new terminal:
+
+```bash
+ollama --version
+ollama pull gpt-oss:20b
+ollama run gpt-oss:20b
+```
+
+Try a stronger model after the first smoke test:
+
+```bash
+ollama pull mistral-small:24b
+ollama pull qwen3:30b
+ollama pull qwen3-coder:30b
+```
+
+Check what is installed:
+
+```bash
+ollama list
+```
+
+#### Configure The Pipeline For Local Bulk Calls
+
+Recommended hybrid configuration:
+
+```yaml
+llm:
+  providers:
+    validation:    ollama
+    scoring:       ollama
+    jd_extraction: ollama
+    tailoring:     anthropic
+    cover_letter:  anthropic
+    discovery:     anthropic
+    linkedin:      anthropic
+    ai_web_search: anthropic
+  models:
+    validation:    "gpt-oss:20b"
+    scoring:       "mistral-small:24b"
+    jd_extraction: "gpt-oss:20b"
+    tailoring:     "claude-sonnet-4-6"
+    cover_letter:  "claude-sonnet-4-6"
+    discovery:     "claude-sonnet-4-6"
+    linkedin:      "claude-sonnet-4-6"
+    ai_web_search: "claude-haiku-4-5-20251001"
+  max_workers: 1
+ollama:
+  base_url: "http://localhost:11434"
+secrets:
+  anthropic:
+    required: true
+  google:
+    required: false
+```
+
+Fully local configuration for testing without cloud keys:
+
+```yaml
+llm:
+  default_provider: ollama
+  providers:
+    validation:    ollama
+    scoring:       ollama
+    jd_extraction: ollama
+    tailoring:     ollama
+    cover_letter:  ollama
+    discovery:     ollama
+    linkedin:      ollama
+    ai_web_search: anthropic  # leave AI web search disabled unless using a cloud provider
+  models:
+    validation:    "gpt-oss:20b"
+    scoring:       "mistral-small:24b"
+    jd_extraction: "gpt-oss:20b"
+    tailoring:     "qwen3:30b"
+    cover_letter:  "qwen3:30b"
+    discovery:     "qwen3:30b"
+    linkedin:      "qwen3:30b"
+    ai_web_search: "claude-haiku-4-5-20251001"
+  max_workers: 1
+secrets:
+  anthropic:
+    required: false
+  openai:
+    required: false
+  google:
+    required: false
+```
+
+Do not set `ai_web_search` to Ollama unless that feature is disabled. This
+pipeline's AI web search role expects a provider with web-search capability.
+
+#### Test Ollama Against This Project
+
+First confirm the server is reachable:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+PowerShell project smoke test:
+
+```powershell
+$env:PYTHONPATH="scripts"
+@'
+from core.llm_client import LLMClient
+
+client = LLMClient("ollama", base_url="http://localhost:11434")
+print(client.complete(
+    system="Return JSON only.",
+    user='Return {"ok": true, "provider": "ollama"}',
+    model="gpt-oss:20b",
+    max_tokens=80,
+    response_format="json",
+))
+'@ | python
+```
+
+Bash/macOS/Linux project smoke test:
+
+```bash
+PYTHONPATH=scripts python - <<'PY'
+from core.llm_client import LLMClient
+
+client = LLMClient("ollama", base_url="http://localhost:11434")
+print(client.complete(
+    system="Return JSON only.",
+    user='Return {"ok": true, "provider": "ollama"}',
+    model="gpt-oss:20b",
+    max_tokens=80,
+    response_format="json",
+))
+PY
+```
+
+After editing `config/api_config.yml`, test the configured roles:
+
+```powershell
+$env:PYTHONPATH="scripts"
+@'
+from core.config import load_api_config
+from core.llm_client import get_llm_client
+
+cfg = load_api_config()
+for role in ("validation", "scoring", "jd_extraction"):
+    model = cfg["llm"]["models"][role]
+    response = get_llm_client(role).complete(
+        system="Return JSON only.",
+        user='Return {"role": "' + role + '", "ok": true}',
+        model=model,
+        max_tokens=80,
+        response_format="json",
+    )
+    print(role, model, response)
+'@ | python
+```
+
+Then run a small local pipeline check before a full hunt:
+
+```bash
+python -m pytest tests/test_llm_client.py tests/test_validator.py tests/test_scorer.py -q
+python scripts/pipeline/orchestrator.py --mode hunt --region berlin --skip-validate --skip-score
+```
+
+Remove `--skip-validate` and `--skip-score` once the Ollama responses look
+stable. If the machine becomes unresponsive, lower `llm.max_workers`, use a
+smaller model, or keep only `validation` and `jd_extraction` on Ollama.
 
 Optional search-provider secrets:
 

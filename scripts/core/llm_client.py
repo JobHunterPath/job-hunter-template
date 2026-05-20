@@ -26,6 +26,15 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 
+def _google_generation_config_kwargs(system: str, max_tokens: int, response_format: str) -> dict:
+    kwargs = {"max_output_tokens": max_tokens}
+    if response_format == "json":
+        kwargs["response_mime_type"] = "application/json"
+    if system:
+        kwargs["system_instruction"] = system
+    return kwargs
+
+
 def _is_retryable(exc: Exception) -> bool:
     msg = str(exc).lower()
     return "429" in msg or "rate" in msg or "quota" in msg or "unavailable" in msg
@@ -102,6 +111,7 @@ class LLMClient:
         model: str,
         max_tokens: int,
         max_retries: int = 3,
+        response_format: str = "text",
     ) -> str:
         """
         Send a prompt and return the response as a plain string.
@@ -123,7 +133,13 @@ class LLMClient:
         for attempt in range(1, max_retries + 1):
             try:
                 self._throttle()
-                return self._call(system=system, user=user, model=model, max_tokens=max_tokens)
+                return self._call(
+                    system=system,
+                    user=user,
+                    model=model,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                )
             except Exception as exc:
                 if not _is_retryable(exc) or attempt == max_retries:
                     raise
@@ -152,7 +168,15 @@ class LLMClient:
 
             time.sleep(max(wait_seconds, 0.1))
 
-    def _call(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+    def _call(
+        self,
+        *,
+        system: str,
+        user: str,
+        model: str,
+        max_tokens: int,
+        response_format: str = "text",
+    ) -> str:
 
         if self._provider == "anthropic":
             kwargs: dict = dict(
@@ -170,21 +194,21 @@ class LLMClient:
             if system:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": user})
-            resp = self._raw.chat.completions.create(
-                model=model,
-                max_tokens=max_tokens,
-                messages=messages,
-            )
+            kwargs: dict = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": messages,
+            }
+            if response_format == "json":
+                kwargs["response_format"] = {"type": "json_object"}
+            resp = self._raw.chat.completions.create(**kwargs)
             return resp.choices[0].message.content.strip()
 
         if self._provider == "google":
             from google.genai import types
-            config = types.GenerateContentConfig(max_output_tokens=max_tokens)
-            if system:
-                config = types.GenerateContentConfig(
-                    system_instruction=system,
-                    max_output_tokens=max_tokens,
-                )
+            config = types.GenerateContentConfig(
+                **_google_generation_config_kwargs(system, max_tokens, response_format)
+            )
             resp = self._raw.models.generate_content(
                 model=model,
                 contents=user,

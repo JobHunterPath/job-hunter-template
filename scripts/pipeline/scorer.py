@@ -51,6 +51,18 @@ Rules:
 
 Return JSON only."""
 
+REPAIR_PROMPT = """\
+Convert this model response into valid JSON matching exactly this schema:
+{{"score": int, "matched_keywords": [str], "gaps": [str], "years_exp_required": int|null}}
+
+Rules:
+- Return ONLY valid JSON.
+- If a field is missing or unclear, use score=0, matched_keywords=[], gaps=["parse repair"], years_exp_required=null.
+
+Response:
+{raw}
+"""
+
 
 def _strip_latex_comments(tex: str) -> str:
     lines = []
@@ -93,6 +105,13 @@ def build_scoring_job_context(job: dict, config: dict) -> str:
     return str(job.get("snippet", ""))[:max_chars]
 
 
+def _parse_score_json(raw: str) -> dict:
+    result = json.loads(extract_json_object(raw))
+    if not isinstance(result, dict):
+        raise ValueError("scoring response must be a JSON object")
+    return result
+
+
 def score(job: dict, config: dict) -> dict:
     settings = get_llm_role_settings("scoring")
     resume_context = build_scoring_resume_context(BASE_RESUME, config)
@@ -105,8 +124,20 @@ def score(job: dict, config: dict) -> dict:
             user=prompt,
             model=settings.model,
             max_tokens=settings.max_tokens,
+            response_format="json",
         )
-        result = json.loads(extract_json_object(raw))
+        try:
+            result = _parse_score_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            logger.info("[scorer] Repairing malformed score JSON for %s", job.get("title", "Unknown"))
+            repaired = get_llm_client("scoring").complete(
+                system=SYSTEM,
+                user=REPAIR_PROMPT.format(raw=raw[:2000]),
+                model=settings.model,
+                max_tokens=settings.max_tokens,
+                response_format="json",
+            )
+            result = _parse_score_json(repaired)
         logger.debug(f"[scorer] {job.get('title', 'Unknown')} → score={result.get('score')}")
     except ImportError:
         raise  # missing SDK affects every job — let filter_matches fail fast

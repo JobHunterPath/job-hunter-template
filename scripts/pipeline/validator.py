@@ -48,6 +48,18 @@ Snippet:
 
 Return JSON: {{"is_active": bool, "over_experience": bool, "reason": "one-line reason if rejected, else null"}}"""
 
+_REPAIR_PROMPT = """\
+Convert this model response into valid JSON matching exactly this schema:
+{{"is_active": bool, "over_experience": bool, "reason": string|null}}
+
+Rules:
+- Return ONLY valid JSON.
+- If a value is missing or unclear, use is_active=true, over_experience=false, reason=null.
+
+Response:
+{raw}
+"""
+
 _INACTIVE_MARKERS = (
     "no longer available",
     "this job has expired",
@@ -71,6 +83,13 @@ _EXPERIENCE_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+
+
+def _parse_validation_json(raw: str) -> dict:
+    result = json.loads(extract_json_object(raw))
+    if not isinstance(result, dict):
+        raise ValueError("validation response must be a JSON object")
+    return result
 
 
 def deterministic_rejection_reason(snippet: str, max_years: int) -> str | None:
@@ -162,8 +181,20 @@ def validate(
                 user=prompt,
                 model=settings.model,
                 max_tokens=settings.max_tokens,
+                response_format="json",
             )
-            result = json.loads(extract_json_object(raw))
+            try:
+                result = _parse_validation_json(raw)
+            except (json.JSONDecodeError, ValueError):
+                logger.info("%s: repairing malformed validation JSON", prefix)
+                repaired = get_llm_client("validation").complete(
+                    system=_SYSTEM,
+                    user=_REPAIR_PROMPT.format(raw=raw[:2000]),
+                    model=settings.model,
+                    max_tokens=settings.max_tokens,
+                    response_format="json",
+                )
+                result = _parse_validation_json(repaired)
 
             if not result.get("is_active", True):
                 reason = result.get("reason", "inactive")

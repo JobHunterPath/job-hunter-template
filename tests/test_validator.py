@@ -148,3 +148,62 @@ def test_validate_sends_ambiguous_experience_to_llm():
     assert valid == jobs
     assert rejected == []
     client.assert_called()
+
+
+def test_validate_requests_json_response_format():
+    jobs = [
+        {
+            "title": "Product Manager",
+            "company": "JsonCo",
+            "url": "https://example.com/jobs/pm",
+            "snippet": "Open product manager role.",
+        }
+    ]
+    api_cfg = {
+        "llm": {
+            "models": {"validation": "test-model"},
+            "max_tokens": {"validation": 200},
+            "max_workers": 1,
+        },
+        "http": {"url_verification": {"enabled": False}},
+    }
+    mock = _mock_client('{"is_active": true, "over_experience": false, "reason": null}')
+
+    with patch("pipeline.validator.get_llm_client", return_value=mock):
+        valid, rejected = validator.validate(jobs, max_years=4, api_cfg=api_cfg)
+
+    assert valid == jobs
+    assert rejected == []
+    assert mock.complete.call_args.kwargs["response_format"] == "json"
+
+
+def test_validate_repairs_malformed_json_once():
+    jobs = [
+        {
+            "title": "Product Manager",
+            "company": "RepairCo",
+            "url": "https://example.com/jobs/pm",
+            "snippet": "Open product manager role.",
+        }
+    ]
+    api_cfg = {
+        "llm": {
+            "models": {"validation": "test-model"},
+            "max_tokens": {"validation": 200},
+            "max_workers": 1,
+        },
+        "http": {"url_verification": {"enabled": False}},
+    }
+    mock = MagicMock()
+    mock.complete.side_effect = [
+        '{"is_active": tru',
+        '{"is_active": true, "over_experience": false, "reason": null}',
+    ]
+
+    with patch("pipeline.validator.get_llm_client", return_value=mock):
+        valid, rejected = validator.validate(jobs, max_years=4, api_cfg=api_cfg)
+
+    assert valid == jobs
+    assert rejected == []
+    assert mock.complete.call_count == 2
+    assert "Convert this model response into valid JSON" in mock.complete.call_args.kwargs["user"]
