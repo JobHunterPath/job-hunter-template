@@ -9,8 +9,9 @@ import os
 import shutil
 import subprocess
 import threading
+from pathlib import Path
 
-from core.config import profile_path
+from core.config import ROOT
 
 _TEXLIVE_IMAGE = "texlive/texlive:latest"
 _DOCKER_PULL_LOCK = threading.Lock()
@@ -46,14 +47,6 @@ def compile_tex(tex_path: str, output_dir: str) -> str | None:
     Returns:
         Path to the generated PDF, or None if compilation failed.
     """
-    # Copy image and class file dependencies into output dir so pdflatex finds them
-    for src in (
-        profile_path("profile_image", ""),
-        profile_path("latex_class", "altacv.cls"),
-    ):
-        if src.exists():
-            shutil.copy(src, output_dir)
-
     abs_output_dir = os.path.abspath(output_dir)
     abs_tex_path = os.path.abspath(tex_path)
 
@@ -64,22 +57,39 @@ def compile_tex(tex_path: str, output_dir: str) -> str | None:
             "-output-directory", abs_output_dir,
             abs_tex_path,
         ]
+        cwd = abs_output_dir
         timeout = 120
     else:
         _ensure_texlive_image()
-        container_tex = f"/workspace/{os.path.basename(abs_tex_path)}"
+        repo_root = ROOT.resolve()
+        output_path = Path(abs_output_dir).resolve()
+        tex_file = Path(abs_tex_path).resolve()
+
+        try:
+            container_output = f"/repo/{output_path.relative_to(repo_root).as_posix()}"
+            container_tex = f"/repo/{tex_file.relative_to(repo_root).as_posix()}"
+            volumes = ["-v", f"{repo_root}:/repo"]
+            cwd = None
+            docker_workdir = container_output
+        except ValueError:
+            container_tex = f"/workspace/{os.path.basename(abs_tex_path)}"
+            volumes = ["-v", f"{abs_output_dir}:/workspace"]
+            cwd = None
+            docker_workdir = "/workspace"
+
         cmd = [
             "docker", "run", "--rm",
-            "-v", f"{abs_output_dir}:/workspace",
+            *volumes,
+            "-w", docker_workdir,
             _TEXLIVE_IMAGE,
             "pdflatex",
             "-interaction=nonstopmode",
-            "-output-directory", "/workspace",
+            "-output-directory", docker_workdir,
             container_tex,
         ]
         timeout = 300
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
 
     expected_pdf = os.path.join(
         abs_output_dir,

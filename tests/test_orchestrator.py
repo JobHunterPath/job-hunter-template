@@ -43,6 +43,46 @@ def test_process_jobs_caps_tailoring_to_15_highest_scores():
     assert processed_titles == [f"Product Manager {idx}" for idx in range(19, 4, -1)]
 
 
+def test_make_generated_tex_self_contained_uses_local_asset_names(tmp_path):
+    image = tmp_path / "Profile-2025.png"
+    image.write_bytes(b"image")
+    cls = tmp_path / "altacv.cls"
+    cls.write_text("class", encoding="utf-8")
+    tex = "\n".join([
+        r"\documentclass[9pt,a4paper,ragged2e,withhyper]{../../altacv}",
+        r"\photoR{2.8cm}{../../Profile-2025}",
+        r"\begin{document}",
+        r"\end{document}",
+    ])
+
+    def fake_profile_path(key, default):
+        return image if key == "profile_image" else cls
+
+    with patch("pipeline.orchestrator.profile_path", side_effect=fake_profile_path):
+        portable = orchestrator._make_generated_tex_self_contained(tex)
+
+    assert r"\documentclass[9pt,a4paper,ragged2e,withhyper]{altacv}" in portable
+    assert r"\photoR{2.8cm}{Profile-2025}" in portable
+
+
+def test_copy_latex_assets_places_dependencies_in_job_dir(tmp_path):
+    job_dir = tmp_path / "jobs" / "example"
+    job_dir.mkdir(parents=True)
+    image = tmp_path / "Profile-2025.png"
+    image.write_bytes(b"image")
+    cls = tmp_path / "altacv.cls"
+    cls.write_text("class", encoding="utf-8")
+
+    def fake_profile_path(key, default):
+        return image if key == "profile_image" else cls
+
+    with patch("pipeline.orchestrator.profile_path", side_effect=fake_profile_path):
+        orchestrator._copy_latex_assets(job_dir)
+
+    assert (job_dir / "Profile-2025.png").read_bytes() == b"image"
+    assert (job_dir / "altacv.cls").read_text(encoding="utf-8") == "class"
+
+
 def test_jobs_from_links_skips_irrelevant_extracted_title():
     irrelevant = {
         "title": "Product Engineer",

@@ -15,6 +15,8 @@ import argparse
 import json
 import logging
 import os
+import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +74,40 @@ def _load_search_rules() -> tuple[list[str], list[str]]:
 
 def update_readme(matches: list[dict]) -> None:
     write_readme_table(matches, ROOT, TODAY)
+
+
+def _copy_latex_assets(job_dir: Path) -> None:
+    for src in (
+        profile_path("latex_class", "altacv.cls"),
+        profile_path("profile_image", ""),
+    ):
+        if src.exists():
+            shutil.copy2(src, job_dir / src.name)
+
+
+def _make_generated_tex_self_contained(tex: str) -> str:
+    latex_class = profile_path("latex_class", "altacv.cls")
+    profile_image = profile_path("profile_image", "")
+
+    if latex_class.exists() or latex_class.name:
+        class_stem = re.escape(latex_class.stem)
+        tex = re.sub(
+            rf"(\\documentclass(?:\[[^\]]*\])?)\{{(?:[./\\]+)?(?:.*[./\\])?{class_stem}\}}",
+            rf"\1{{{latex_class.stem}}}",
+            tex,
+            count=1,
+        )
+
+    if profile_image.exists() or profile_image.name:
+        image_stem = re.escape(profile_image.stem)
+        tex = re.sub(
+            rf"(\\photoR\{{[^}}]+\}})\{{(?:[./\\]+)?(?:.*[./\\])?{image_stem}\}}",
+            rf"\1{{{profile_image.stem}}}",
+            tex,
+            count=1,
+        )
+
+    return tex
 
 
 def _jobs_from_hunt(region: str | None = None) -> tuple[list[dict], set, set]:
@@ -203,7 +239,8 @@ def _process_match(match: dict) -> bool:
     logger.info("  Tailoring resume...")
     try:
         tex_path = job_dir / "resume_tailored.tex"
-        tex_path.write_text(tailor(match), encoding="utf-8")
+        tex_path.write_text(_make_generated_tex_self_contained(tailor(match)), encoding="utf-8")
+        _copy_latex_assets(job_dir)
         logger.info("  resume tailored")
     except Exception as e:
         logger.error("  tailoring failed: %s", e)
