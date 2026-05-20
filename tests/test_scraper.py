@@ -382,6 +382,34 @@ def test_scrape_allows_ai_web_search_linkedin_job_urls():
     assert jobs == [ai_job]
 
 
+def test_scrape_skips_ai_web_search_when_existing_results_meet_threshold():
+    direct_job = {
+        "title": "Product Owner",
+        "company": "TestCo",
+        "url": "https://boards.greenhouse.io/testco/jobs/12345",
+        "posted": "",
+        "snippet": "Product backlog role",
+        "source": "Greenhouse API",
+    }
+    api_cfg = {
+        "http": {
+            "search_providers": {
+                "ai_web_search": {"run_if_fewer_than_jobs": 1}
+            }
+        }
+    }
+
+    with patch('sources.scraper.load_search_config', return_value=CONFIG), \
+         patch('sources.scraper.load_api_config', return_value=api_cfg), \
+         patch('sources.scraper.load_companies', return_value=COMPANIES[:1]), \
+         patch('sources.scraper.fetch_ats_jobs', return_value=[direct_job]), \
+         patch('sources.scraper.fetch_ai_web_search_jobs') as ai_search:
+        jobs = scraper.scrape()
+
+    assert jobs == [direct_job]
+    ai_search.assert_not_called()
+
+
 # ── scrape() — ATS path ───────────────────────────────────────────────────────
 
 ATS_JOB = {

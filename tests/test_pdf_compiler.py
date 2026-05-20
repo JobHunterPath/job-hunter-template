@@ -2,7 +2,16 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from pipeline import pdf_compiler
+
+
+@pytest.fixture(autouse=True)
+def reset_docker_pull_cache():
+    pdf_compiler._docker_image_pulled = False
+    yield
+    pdf_compiler._docker_image_pulled = False
 
 
 def _fake_run_creates_pdf(pdf_path):
@@ -26,6 +35,30 @@ def test_compile_tex_returns_pdf_path_when_pdflatex_succeeds(tmp_path):
         result = pdf_compiler.compile_tex(str(tex), str(tmp_path))
 
     assert result == str(expected_pdf)
+
+
+def test_compile_tex_copies_configured_profile_assets(tmp_path):
+    tex = tmp_path / 'resume.tex'
+    tex.write_text(r'\documentclass{article}\begin{document}x\end{document}')
+    image = tmp_path / 'Profile-2025.png'
+    image.write_bytes(b'image')
+    cls = tmp_path / 'altacv.cls'
+    cls.write_text('class')
+    out_dir = tmp_path / 'out'
+    out_dir.mkdir()
+    expected_pdf = out_dir / 'resume.pdf'
+
+    def fake_profile_path(key, default):
+        return image if key == 'profile_image' else cls
+
+    with patch('pipeline.pdf_compiler.profile_path', side_effect=fake_profile_path), \
+         patch('pipeline.pdf_compiler.shutil.which', return_value='/usr/bin/pdflatex'), \
+         patch('pipeline.pdf_compiler.subprocess.run', side_effect=_fake_run_creates_pdf(expected_pdf)):
+        result = pdf_compiler.compile_tex(str(tex), str(out_dir))
+
+    assert result == str(expected_pdf)
+    assert (out_dir / 'Profile-2025.png').read_bytes() == b'image'
+    assert (out_dir / 'altacv.cls').read_text() == 'class'
 
 
 def test_compile_tex_returns_none_when_no_pdf_produced(tmp_path):
@@ -61,3 +94,31 @@ def test_compile_tex_uses_docker_when_no_pdflatex(tmp_path):
 
     assert any('docker' in str(c) for c in docker_calls[0])
     assert result == str(expected_pdf)
+
+
+def test_compile_tex_pulls_docker_image_once_when_reused(tmp_path):
+    tex = tmp_path / 'resume.tex'
+    tex.write_text('content')
+    expected_pdf = tmp_path / 'resume.pdf'
+    docker_calls = []
+
+    def _run(cmd, **kwargs):
+        docker_calls.append(cmd)
+        if 'pdflatex' in ' '.join(str(c) for c in cmd):
+            expected_pdf.write_bytes(b'%PDF-fake')
+        result = MagicMock()
+        result.stdout = ''
+        return result
+
+    with patch('pipeline.pdf_compiler.shutil.which', return_value=None), \
+         patch('pipeline.pdf_compiler.subprocess.run', side_effect=_run):
+        first = pdf_compiler.compile_tex(str(tex), str(tmp_path))
+        second = pdf_compiler.compile_tex(str(tex), str(tmp_path))
+
+    pull_calls = [call for call in docker_calls if call[:2] == ['docker', 'pull']]
+    run_calls = [call for call in docker_calls if call[:2] == ['docker', 'run']]
+
+    assert first == str(expected_pdf)
+    assert second == str(expected_pdf)
+    assert len(pull_calls) == 1
+    assert len(run_calls) == 2

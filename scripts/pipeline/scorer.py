@@ -5,13 +5,15 @@ Scoring criteria are configurable via scoring_config.yml.
 
 import json
 import logging
+import re
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 import yaml
 
 from core.config import ROOT, load_api_config, profile_path
 from core.llm_client import get_llm_client
+from core.llm_utils import extract_json_object, get_llm_role_settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ Schema: {"score": int, "matched_keywords": [str], "gaps": [str], "years_exp_requ
 
 PROMPT = """Score this candidate's resume against the job description.
 
-RESUME (LaTeX source):
+RESUME CONTEXT:
 {resume}
 
 JOB DESCRIPTION:
@@ -50,38 +52,61 @@ Rules:
 Return JSON only."""
 
 
-def _extract_json(raw: str) -> str:
-    """Strip markdown fences and extract the outermost JSON object."""
-    text = raw.strip()
-    # Strip ``` or ```json fences
-    if text.startswith("```"):
-        lines = text.splitlines()
-        end = next((i for i in range(len(lines) - 1, 0, -1) if lines[i].strip() == "```"), None)
-        text = "\n".join(lines[1:end] if end else lines[1:]).strip()
-    # Fallback: find outermost { … } in case the model added preamble text
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        text = text[start : end + 1]
-    return text
+def _strip_latex_comments(tex: str) -> str:
+    lines = []
+    for line in tex.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("%"):
+            continue
+        lines.append(line.split("%", 1)[0].rstrip())
+    return "\n".join(lines)
+
+
+def _compact_latex_resume(tex: str) -> str:
+    text = _strip_latex_comments(tex)
+    text = re.sub(r"\\(documentclass|usepackage|geometry|hypersetup)(?:\[[^\]]*\])?\{[^}]*\}", " ", text)
+    text = re.sub(r"\\(begin|end)\{[^}]*\}", "\n", text)
+    text = re.sub(r"\\[a-zA-Z*]+(?:\[[^\]]*\])?", " ", text)
+    text = text.replace("{", " ").replace("}", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _scoring_prompt_config(config: dict) -> dict:
+    scoring = config.get("scoring", {}) or {}
+    return scoring.get("prompt_context", {}) or {}
+
+
+def build_scoring_resume_context(resume: str, config: dict) -> str:
+    prompt_cfg = _scoring_prompt_config(config)
+    mode = str(prompt_cfg.get("resume_mode", "compact_text"))
+    max_chars = int(prompt_cfg.get("resume_max_chars", 4500))
+
+    context = _compact_latex_resume(resume) if mode == "compact_text" else resume
+    return context[:max_chars]
+
+
+def build_scoring_job_context(job: dict, config: dict) -> str:
+    prompt_cfg = _scoring_prompt_config(config)
+    max_chars = int(prompt_cfg.get("job_description_max_chars", 5000))
+    return str(job.get("snippet", ""))[:max_chars]
 
 
 def score(job: dict, config: dict) -> dict:
-    api_cfg = load_api_config()
-    llm = api_cfg.get("llm", {})
-    model = llm.get("models", {}).get("scoring", "claude-haiku-4-5-20251001")
-    max_tokens = llm.get("max_tokens", {}).get("scoring", 1000)
-
-    prompt = PROMPT.format(resume=BASE_RESUME[:6000], jd=job["snippet"])
+    settings = get_llm_role_settings("scoring")
+    resume_context = build_scoring_resume_context(BASE_RESUME, config)
+    jd_context = build_scoring_job_context(job, config)
+    prompt = PROMPT.format(resume=resume_context, jd=jd_context)
 
     try:
         raw = get_llm_client("scoring").complete(
             system=SYSTEM,
             user=prompt,
-            model=model,
-            max_tokens=max_tokens,
+            model=settings.model,
+            max_tokens=settings.max_tokens,
         )
-        result = json.loads(_extract_json(raw))
+        result = json.loads(extract_json_object(raw))
         logger.debug(f"[scorer] {job.get('title', 'Unknown')} → score={result.get('score')}")
     except ImportError:
         raise  # missing SDK affects every job — let filter_matches fail fast

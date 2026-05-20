@@ -73,6 +73,11 @@ commented-out section or add a new one. Configure the allowed story ID prefixes,
 project count, bullet count, and page limit in
 `config/tailoring_config.yml` under `tailoring.rules.projects`.
 
+**Scoring prompt size:** `config/scoring_config.yml` includes
+`scoring.prompt_context` settings that compact LaTeX boilerplate/comments and
+cap resume/JD characters sent to the scoring model without changing scoring
+thresholds or strategic overrides.
+
 ## Search Fallbacks
 
 Search APIs are optional except for the LLM provider you choose. After direct

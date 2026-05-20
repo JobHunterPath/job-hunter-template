@@ -20,6 +20,7 @@ tailoring:
       max_per_role: 5
       max_lines_per_bullet: 2
       required_verb_tense: "past"
+      forbidden_repeated_verbs_count: 2
     projects:
       enabled_when_section_active: true
       never_uncomment_project_section: true
@@ -61,3 +62,10 @@ tailoring:
     max_chars_for_tailoring: 16000
     gap_coverage: "medium"
     strict_no_fabrication: true
+
+performance_tracking:
+  enabled: false
+  track:
+    - "interviews_per_job_score"
+    - "keyword_relevance_feedback"
+    - "hiring_manager_comments"

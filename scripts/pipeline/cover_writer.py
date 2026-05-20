@@ -10,8 +10,9 @@ from typing import Optional
 from datetime import datetime
 import yaml
 
-from core.config import ROOT, load_api_config, profile_path
+from core.config import ROOT, profile_path
 from core.llm_client import get_llm_client
+from core.llm_utils import get_llm_role_settings
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +129,7 @@ def write_cover(
         config = load_cover_letter_config()
 
     job = match_result["job"]
-    api_cfg = load_api_config()
-    llm = api_cfg.get("llm", {})
-    model = llm.get("models", {}).get("cover_letter", "claude-sonnet-4-6")
-    max_tokens = llm.get("max_tokens", {}).get("cover_letter", 800)
+    settings = get_llm_role_settings("cover_letter")
 
     header_config = _config_section(config, "header")
     if header_config.get("include_date", True):
@@ -156,8 +154,8 @@ def write_cover(
         body = get_llm_client("cover_letter").complete(
             system=_SYSTEM,
             user=prompt,
-            model=model,
-            max_tokens=max_tokens,
+            model=settings.model,
+            max_tokens=settings.max_tokens,
         )
         body = _clean_body(body)
         logger.debug(f"[cover] Generated body ({len(body)} chars)")

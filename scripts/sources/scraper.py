@@ -10,21 +10,20 @@ The fallback order is intentionally conservative:
 import json
 import logging
 import os
-import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-from urllib.parse import urlparse
 
 import requests  # kept as a stable test/mock patch point for provider HTTP calls
 import yaml
 
 from core.config import RAPIDAPI_KEY
-from core.utils import title_matches
+from core.config import load_api_config
 from sources.ats import fetch_ats_jobs
 from sources.ai_web_search import fetch_ai_web_search_jobs
 from sources.jobspy_source import fetch_jobspy_jobs
 from sources.job_boards import fetch_arbeitnow_jobs, fetch_jsearch_jobs
+from sources.job_policy import JobPolicy, make_job_filter
 from sources.search_providers import (
     BraveProvider,
     canonicalize_url,
@@ -37,11 +36,6 @@ from tracking.discovery_cache import load_cached_candidate_urls, save_cached_can
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
-
-_LISTING_ONLY_PATHS = {
-    "/jobs", "/careers", "/positions", "/openings", "/vacancies",
-    "/work-with-us", "/join-us",
-}
 
 
 def load_search_config() -> dict:
@@ -127,45 +121,28 @@ def build_queries(companies: list[dict], config: dict) -> list[tuple[str, str, s
 
 def is_valid_job_url(url: str) -> bool:
     """Return False for root/listing pages that are not individual job postings."""
-    parsed = urlparse(url)
-    path = parsed.path.rstrip("/")
-
-    if not path:
-        return False
-    if path in _LISTING_ONLY_PATHS:
-        return False
-
-    segments = [s for s in path.split("/") if s]
-    return len(segments) >= 2
+    return JobPolicy({}).is_valid_job_url(url)
 
 
 def is_excluded_url(url: str, config: dict) -> bool:
     """Return True when caller-configured URL patterns identify non-posting pages."""
-    patterns = config.get("exclusion_rules", {}).get("excluded_url_patterns", [])
-    return any(re.search(pattern, url, re.IGNORECASE) for pattern in patterns)
+    return JobPolicy(config).is_excluded_url(url)
 
 
 def is_stale_posting(title: str, snippet: str, config: dict) -> bool:
-    combined = (title + " " + snippet).lower()
-    stale_indicators = config.get("exclusion_rules", {}).get("stale_indicators", [])
-    return any(indicator in combined for indicator in stale_indicators)
+    return JobPolicy(config).is_stale_posting(title, snippet)
 
 
 def is_too_senior(title: str, snippet: str, config: dict) -> bool:
-    combined = (title + " " + snippet).lower()
-    senior_flags = config.get("exclusion_rules", {}).get("senior_flags", [])
-    return any(flag in combined for flag in senior_flags)
+    return JobPolicy(config).is_too_senior(title, snippet)
 
 
 def is_excluded(snippet: str, config: dict) -> bool:
-    excluded_industries = config.get("exclusion_rules", {}).get("excluded_industries", [])
-    return any(kw in snippet.lower() for kw in excluded_industries)
+    return JobPolicy(config).is_excluded_industry(snippet)
 
 
 def is_german(title: str, snippet: str, config: dict) -> bool:
-    combined = (title + " " + snippet).lower()
-    german_indicators = config.get("exclusion_rules", {}).get("german_indicators", [])
-    return any(word in combined for word in german_indicators)
+    return JobPolicy(config).is_german(title, snippet)
 
 
 def brave_search(query: str, region_config: dict, count: Optional[int] = None) -> list[dict]:
@@ -196,52 +173,15 @@ def _make_filter(
     cached_candidate_urls: Optional[set[str]] = None,
     candidate_cache_updates: Optional[set[str]] = None,
 ):
-    excluded_title_terms = config.get("exclusion_rules", {}).get("excluded_title_terms", [])
-    _lock = lock or threading.Lock()
-    cached_candidate_urls = cached_candidate_urls if cached_candidate_urls is not None else set()
-    candidate_cache_updates = candidate_cache_updates if candidate_cache_updates is not None else set()
-
-    def add_job(job: dict, allow_excluded_urls: bool = False, cache_candidate: bool = False) -> bool:
-        url = job.get("url", "")
-        canonical_url = canonicalize_url(url)
-        if not url:
-            return False
-        if cache_candidate:
-            if canonical_url in cached_candidate_urls:
-                logger.debug("[skip] Cached discovery candidate: %s", url[:80])
-                return False
-            candidate_cache_updates.add(canonical_url)
-        # All filtering before the lock (no shared state needed)
-        if not allow_excluded_urls and is_excluded_url(url, config):
-            logger.debug("[skip] Excluded URL pattern: %s", url[:80])
-            return False
-        if title_filters and not title_matches(job.get("title", ""), title_filters, excluded_title_terms):
-            logger.debug("[skip] Title not in filters: %s", job.get("title", "")[:60])
-            return False
-        if is_german(job.get("title", ""), job.get("snippet", ""), config):
-            logger.debug("[skip] German posting: %s", job.get("title", "")[:60])
-            return False
-        if is_too_senior(job.get("title", ""), job.get("snippet", ""), config):
-            logger.debug("[skip] Too senior: %s", job.get("title", "")[:60])
-            return False
-        if is_excluded(job.get("snippet", ""), config):
-            logger.debug("[skip] Excluded industry: %s", job.get("title", "")[:60])
-            return False
-        # Atomic dedup + append
-        with _lock:
-            if canonical_url in seen_urls:
-                return False
-            seen_urls.add(canonical_url)
-            results.append(job)
-        logger.info(
-            "[found] %s @ %s [%s]",
-            job.get("title", "")[:50],
-            job.get("company", "?"),
-            job.get("source", "?"),
-        )
-        return True
-
-    return add_job
+    return make_job_filter(
+        config,
+        seen_urls,
+        results,
+        title_filters,
+        lock,
+        cached_candidate_urls,
+        candidate_cache_updates,
+    )
 
 
 def scrape(region: Optional[str] = None) -> list[dict]:
@@ -268,6 +208,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
     cached_candidate_urls = load_cached_candidate_urls()
     candidate_cache_updates: set[str] = set()
     lock = threading.Lock()
+    policy = JobPolicy(config)
     add_job = _make_filter(
         config,
         seen_urls,
@@ -328,16 +269,7 @@ def scrape(region: Optional[str] = None) -> list[dict]:
 
                 if not url:
                     continue
-                if is_excluded_url(url, config):
-                    logger.debug("[skip] Excluded URL pattern: %s", url[:80])
-                    filtered_count += 1
-                    continue
-                if not is_valid_job_url(url):
-                    logger.debug("[skip] Not a job posting URL: %s", url[:80])
-                    filtered_count += 1
-                    continue
-                if is_stale_posting(title, snippet, config):
-                    logger.debug("[skip] Stale/closed posting: %s", title[:60])
+                if not policy.accepts_search_result_url(url, title, snippet):
                     filtered_count += 1
                     continue
 
@@ -430,11 +362,26 @@ def scrape(region: Optional[str] = None) -> list[dict]:
             ):
                 add_job(job)
 
-    try:
-        for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
-            add_job(job, allow_excluded_urls=True, cache_candidate=True)
-    except Exception as e:
-        logger.warning("[scraper] AI web search failed: %s", e)
+    ai_web_cfg = (
+        load_api_config()
+        .get("http", {})
+        .get("search_providers", {})
+        .get("ai_web_search", {})
+        or {}
+    )
+    ai_min_jobs = int(ai_web_cfg.get("run_if_fewer_than_jobs", 0) or 0)
+    if ai_min_jobs > 0 and len(results) >= ai_min_jobs:
+        logger.info(
+            "[scraper] Skipping AI web search: %s result(s) already meet threshold %s",
+            len(results),
+            ai_min_jobs,
+        )
+    else:
+        try:
+            for job in fetch_ai_web_search_jobs(title_filters, enabled_regions):
+                add_job(job, allow_excluded_urls=True, cache_candidate=True)
+        except Exception as e:
+            logger.warning("[scraper] AI web search failed: %s", e)
 
     logger.info("[scraper] Complete: %s jobs found", len(results))
     if candidate_cache_updates:

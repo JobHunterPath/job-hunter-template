@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 import yaml
 from dataclasses import dataclass
@@ -20,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 ROLE = "ai_web_search"
 GOOGLE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_SECRET_CACHE: dict[tuple[str, str, bool], str] = {}
+_OPENAI_CLIENTS: dict[str, Any] = {}
+_ANTHROPIC_CLIENTS: dict[str, Any] = {}
+_CLIENT_LOCK = threading.Lock()
 
 SYSTEM_PROMPT = """You find public job postings. Return only valid JSON.
 Rules:
@@ -181,7 +186,38 @@ def _provider_secret(provider: str) -> str:
     env_var = provider_cfg.get("env_var", "")
     if not env_var:
         raise RuntimeError(f"Missing secrets.{provider}.env_var for AI web search")
-    return get_secret(env_var, required=provider_cfg.get("required", False))
+    required = bool(provider_cfg.get("required", False))
+    key = (provider, env_var, required)
+    with _CLIENT_LOCK:
+        if key in _SECRET_CACHE:
+            return _SECRET_CACHE[key]
+        secret = get_secret(env_var, required=required)
+        _SECRET_CACHE[key] = secret
+        return secret
+
+
+def _openai_client(api_key: str):
+    with _CLIENT_LOCK:
+        if api_key in _OPENAI_CLIENTS:
+            return _OPENAI_CLIENTS[api_key]
+
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        _OPENAI_CLIENTS[api_key] = client
+        return client
+
+
+def _anthropic_client(api_key: str):
+    with _CLIENT_LOCK:
+        if api_key in _ANTHROPIC_CLIENTS:
+            return _ANTHROPIC_CLIENTS[api_key]
+
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=api_key)
+        _ANTHROPIC_CLIENTS[api_key] = client
+        return client
 
 
 def _complete_with_web_search(provider: str, model: str, user: str, max_tokens: int) -> str:
@@ -208,9 +244,7 @@ def _complete_with_web_search(provider: str, model: str, user: str, max_tokens: 
         return "".join(part.get("text", "") for part in parts).strip()
 
     if provider == "openai":
-        from openai import OpenAI
-
-        client = OpenAI(api_key=_provider_secret("openai"))
+        client = _openai_client(_provider_secret("openai"))
         resp = client.responses.create(
             model=model,
             input=[
@@ -223,9 +257,7 @@ def _complete_with_web_search(provider: str, model: str, user: str, max_tokens: 
         return getattr(resp, "output_text", "").strip()
 
     if provider == "anthropic":
-        from anthropic import Anthropic
-
-        client = Anthropic(api_key=_provider_secret("anthropic"))
+        client = _anthropic_client(_provider_secret("anthropic"))
         resp = client.messages.create(
             model=model,
             max_tokens=max_tokens,

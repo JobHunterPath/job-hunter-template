@@ -6,6 +6,9 @@ regions:
     search_lang: "en"
     location: "Berlin"
     description: "Primary search region"
+    job_titles:
+      - "Product Manager"
+      - "Product Owner"
     companies:
       - name: Example SaaS Company
         career_url: boards.greenhouse.io/example

@@ -9,58 +9,42 @@ Two modes, one entry point:
   tailor-links     Tailor resume for a specific list of URLs.
                    Pass --links "URL1, URL2" or set TAILOR_LINKS env var.
                    Discovered companies are registered to search_config.yml regions.
-
-Usage:
-  python scripts/pipeline/orchestrator.py
-  python scripts/pipeline/orchestrator.py --region berlin
-  python scripts/pipeline/orchestrator.py --mode tailor-links --links "https://url1, https://url2"
-  python scripts/pipeline/orchestrator.py --mode tailor-links --skip-score --force
 """
 
 import argparse
 import json
-import os
-import re
-import sys
-import yaml
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import os
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
-from core.config import setup_logging, load_api_config, profile_path
-from core.utils import title_matches, url_is_alive
-from sources.scraper import scrape
-from pipeline.validator import validate
+import yaml
+
+from core.config import load_api_config, profile_path, setup_logging
+from core.url_liveness import UrlLivenessCache
+from core.utils import title_matches
+from pipeline.company_registry import extract_career_url, register_company
+from pipeline.cover_writer import write_cover
+from pipeline.enrichment import drop_dead_urls_before_enrichment, enrich_snippets
+from pipeline.pdf_compiler import compile_tex
+from pipeline.readme_writer import slugify
+from pipeline.readme_writer import update_readme as write_readme_table
 from pipeline.scorer import filter_matches
 from pipeline.tailorer import tailor
-from pipeline.cover_writer import write_cover
-from pipeline.pdf_compiler import compile_tex
-from tracking.tracker import filter_new_jobs, load_processed, mark_processed
+from pipeline.validator import validate
 from sources.jd_fetcher import fetch_jd
+from sources.scraper import scrape
+from tracking.tracker import filter_new_jobs, load_processed, mark_processed
 
 logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
 
 TODAY = datetime.today().strftime("%Y-%m-%d")
 MAX_TAILORING_PER_RUN = 15
 
-# scripts/pipeline/ → scripts/ → repo root
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 JOBS_DIR = profile_path("output_dir", "jobs")
 JOBS_DIR.mkdir(exist_ok=True)
-
-
-# ── Utilities ──────────────────────────────────────────────────────────────────
-
-def slugify(text: str) -> str:
-    text = re.sub(r"[^\w\s-]", "", text.lower())
-    return re.sub(r"\s+", "-", text.strip())[:50]
-
-
-TABLE_START = "<!-- JOBS_TABLE_START -->"
-TABLE_END = "<!-- JOBS_TABLE_END -->"
-TABLE_HEADER = "| Date | Job | Location | Score | Files |\n|---|---|---|---|---|"
 
 
 def _parse_urls(raw: str) -> list[str]:
@@ -85,90 +69,9 @@ def _load_search_rules() -> tuple[list[str], list[str]]:
     return title_filters, excluded_title_terms
 
 
-def _parse_existing_rows(table_body: str) -> dict[str, str]:
-    rows: dict[str, str] = {}
-    for line in table_body.splitlines():
-        line = line.strip()
-        if not line.startswith("|"):
-            continue
-        url_match = re.search(r"\]\((https?://[^)]+)\)", line)
-        if url_match:
-            rows[url_match.group(1)] = _ensure_location_column(line)
-    return rows
+def update_readme(matches: list[dict]) -> None:
+    write_readme_table(matches, ROOT, TODAY)
 
-
-def _ensure_location_column(row: str) -> str:
-    try:
-        left, files_tail = row.rsplit(" | [Files](", 1)
-        before_score, score = left.rsplit(" | ", 1)
-    except ValueError:
-        return row
-
-    before_score = _escape_link_text_pipes(before_score)
-    link_end = before_score.rfind(")")
-    has_location = link_end != -1 and before_score[link_end + 1 :].strip().startswith("|")
-    if not has_location:
-        return f"{before_score} | Unknown | {score} | [Files]({files_tail}"
-    return f"{before_score} | {score} | [Files]({files_tail}"
-
-
-def _escape_table_cell(value: object) -> str:
-    return str(value or "Unknown").replace("\n", " ").replace("|", r"\|")
-
-
-def _escape_link_text_pipes(value: str) -> str:
-    def _replace(match: re.Match) -> str:
-        text = match.group(1).replace("|", r"\|")
-        return f"[{text}]({match.group(2)})"
-
-    return re.sub(
-        r"\[([^\]]*)\]\((https?://[^)]+)\)",
-        _replace,
-        value,
-    )
-
-
-def _job_location(job: dict) -> str:
-    return _escape_table_cell(job.get("location") or job.get("region") or "Unknown")
-
-
-def update_readme(matches: List[dict]) -> None:
-    logger.info(f"[readme] Updating with {len(matches)} job(s)")
-    readme_path = Path(ROOT) / "README.md"
-    try:
-        content = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
-        start_idx = content.find(TABLE_START)
-        end_idx = content.find(TABLE_END)
-        if start_idx == -1 or end_idx == -1:
-            logger.warning("[readme] Markers not found — skipping update")
-            return
-        table_block = content[start_idx + len(TABLE_START):end_idx]
-        existing_rows = _parse_existing_rows(table_block)
-        for m in sorted(matches, key=lambda x: x["score"], reverse=True):
-            job = m["job"]
-            if job["url"] in existing_rows:
-                continue
-            slug = f"{TODAY}_{slugify(job['company'])}_{slugify(job['title'])}"
-            label = _escape_table_cell(f"{job['title']} @ {job['company']}")
-            existing_rows[job["url"]] = (
-                f"| {TODAY} | [{label}]({job['url']}) | {_job_location(job)}"
-                f" | {m['score']} | [Files](jobs/{slug}/) |"
-            )
-        all_rows = sorted(existing_rows.values(), reverse=True)
-        new_table = f"\n{TABLE_HEADER}\n" + "\n".join(all_rows) + "\n"
-        updated = (
-            content[:start_idx]
-            + TABLE_START + new_table + TABLE_END
-            + content[end_idx + len(TABLE_END):]
-        )
-        readme_path.write_text(updated, encoding="utf-8")
-        logger.info(f"[readme] Table now has {len(all_rows)} row(s)")
-    except Exception as e:
-        logger.error(f"[readme] Update failed: {e}")
-        raise
-
-
-# ── Job sources ────────────────────────────────────────────────────────────────
 
 def _jobs_from_hunt(region: str | None = None) -> tuple[list[dict], set, set]:
     """Scrape configured companies/boards, then deduplicate against processed jobs."""
@@ -190,7 +93,7 @@ def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:
     title_filters, excluded_title_terms = _load_search_rules()
     for url in _parse_urls(raw):
         if not force and url in existing_urls:
-            logger.info(f"  [skip] Already processed (use --force to re-tailor): {url}")
+            logger.info("  [skip] Already processed (use --force to re-tailor): %s", url)
             continue
         job = fetch_jd(url)
         if job:
@@ -203,170 +106,41 @@ def _jobs_from_links(raw: str, force: bool, existing_urls: set) -> list[dict]:
                 continue
             _register_company(job)
             jobs.append(job)
-            logger.info(f"  fetched: {job['title']} @ {job['company']}")
+            logger.info("  fetched: %s @ %s", job["title"], job["company"])
         else:
-            logger.warning(f"  could not fetch JD: {url}")
+            logger.warning("  could not fetch JD: %s", url)
     return jobs
 
 
-# ── Company registration ───────────────────────────────────────────────────────
-
-_CAREER_URL_PATTERNS = [
-    (r"(?:boards|job-boards)\.greenhouse\.io/([^/?#]+)", "boards.greenhouse.io/{0}"),
-    (r"jobs\.lever\.co/([^/?#]+)",            "jobs.lever.co/{0}"),
-    (r"jobs\.smartrecruiters\.com/([^/?#]+)", "jobs.smartrecruiters.com/{0}"),
-    (r"jobs\.ashbyhq\.com/([^/?#]+)",         "jobs.ashbyhq.com/{0}"),
-    (r"([^/.]+)\.careers\.hibob\.com",        "{0}.careers.hibob.com"),
-    (r"([^/.]+)\.jobs\.personio\.de",         "{0}.jobs.personio.de"),
-    (r"([^/.]+)\.breezy\.hr",                 "{0}.breezy.hr"),
-    (r"([^/.]+)\.workable\.com",              "{0}.workable.com"),
-    (r"([^/.]+)\.recruitee\.com",             "{0}.recruitee.com"),
-]
-
-
 def _extract_career_url(job_url: str) -> str | None:
-    """Derive the ATS base/career URL from a specific job posting URL."""
-    for pattern, template in _CAREER_URL_PATTERNS:
-        m = re.search(pattern, job_url, re.IGNORECASE)
-        if m:
-            return template.format(m.group(1))
-    return None
+    return extract_career_url(job_url)
 
 
 def _register_company(job: dict) -> None:
-    """
-    Add the job's company to search_config.yml regions so the daily hunt scraper picks it up.
-    """
-    career_url = _extract_career_url(job.get("url", ""))
-    if not career_url:
-        logger.debug(f"[register] Cannot derive career URL for {job.get('company')} — skipping")
-        return
+    register_company(job, ROOT)
 
-    company_name = job["company"]
-
-    # ── search_config.yml (daily hunt scraper) ─────────────────────────────────
-    search_cfg_path = Path(ROOT) / "config" / "search_config.yml"
-    try:
-        sc_data = yaml.safe_load(search_cfg_path.read_text(encoding="utf-8")) or {}
-    except FileNotFoundError:
-        logger.warning("[register] search_config.yml not found — skipping scraper registration")
-        return
-
-    regions = sc_data.get("regions", {})
-    added_to = []
-    for region_name, region_config in regions.items():
-        if not region_config.get("enabled", True):
-            continue
-        companies = region_config.get("companies", [])
-        existing_names = {c.get("name", "").lower() for c in companies}
-        if company_name.lower() not in existing_names:
-            companies.append({"name": company_name, "career_url": career_url})
-            region_config["companies"] = companies
-            added_to.append(region_name)
-
-    if added_to:
-        search_cfg_path.write_text(
-            yaml.dump(sc_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
-        logger.info(f"[register] Added {company_name} ({career_url}) → search_config.yml regions: {', '.join(added_to)}")
-    else:
-        logger.debug(f"[register] {company_name} already in all enabled regions")
-
-
-# ── Snippet enrichment ────────────────────────────────────────────────────────
 
 def _enrich_snippets(jobs: list[dict], api_cfg: dict | None = None) -> list[dict]:
-    """
-    Fetch full JD content for jobs with sparse or missing snippets.
-
-    ATS APIs (Greenhouse, Lever, Ashby, etc.) return rich descriptions directly.
-    Brave Search results carry only a short meta snippet, and HiBob jobs return
-    an empty snippet (Playwright listing scraper gets titles only). Enriching
-    before validation and scoring significantly improves quality for both cases.
-    """
-    if api_cfg is None:
-        api_cfg = load_api_config()
-
-    enrich_cfg = api_cfg.get("http", {}).get("jd_enrichment", {}) or {}
-    max_workers = int(enrich_cfg.get("max_workers", 5))
-    skip_patterns = enrich_cfg.get("skip_url_patterns", []) or []
-
-    def _should_skip_enrichment(url: str) -> bool:
-        return any(re.search(pattern, url, re.IGNORECASE) for pattern in skip_patterns)
-
-    sparse = []
-    skipped = 0
-    for job in jobs:
-        needs_enrichment = (
-            not job.get("snippet")
-            or len(job.get("snippet", "")) < 300
-            or job.get("source", "").startswith("Brave")
-        )
-        if not needs_enrichment:
-            continue
-        if _should_skip_enrichment(job.get("url", "")):
-            skipped += 1
-            continue
-        sparse.append(job)
-    if not sparse:
-        if skipped:
-            logger.info("[pipeline] Skipped enrichment for %s throttled URL(s)", skipped)
-        return jobs
-
-    logger.info(f"[pipeline] Enriching {len(sparse)} job(s) with sparse snippets...")
-    if skipped:
-        logger.info("[pipeline] Skipped enrichment for %s throttled URL(s)", skipped)
-    enriched: dict[str, dict] = {}
-
-    def _fetch_one(job: dict) -> None:
-        logger.info(f"  enriching: {job['title'][:50]} @ {job['company']}")
-        full = fetch_jd(job["url"], use_llm=False)
-        if full and full.get("snippet"):
-            enriched[job["url"]] = {**job, "snippet": full["snippet"]}
-            logger.info(f"    -> {len(full['snippet'])} chars")
-        else:
-            logger.warning(f"    -> enrichment failed, keeping original snippet")
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        list(executor.map(_fetch_one, sparse))
-
-    return [enriched.get(j["url"], j) for j in jobs]
+    return enrich_snippets(jobs, api_cfg, fetcher=fetch_jd)
 
 
-def _drop_dead_urls_before_enrichment(jobs: list[dict], api_cfg: dict) -> list[dict]:
-    """Avoid fetching full JDs for postings that already fail URL verification."""
-    url_cfg = api_cfg.get("http", {}).get("url_verification", {})
-    if not url_cfg.get("enabled", True):
-        return jobs
+def _drop_dead_urls_before_enrichment(
+    jobs: list[dict],
+    api_cfg: dict,
+    url_checker=None,
+) -> list[dict]:
+    return drop_dead_urls_before_enrichment(
+        jobs,
+        api_cfg,
+        url_checker=url_checker or UrlLivenessCache().is_alive,
+    )
 
-    timeout = int(url_cfg.get("timeout_seconds", 5))
-    alive: list[dict] = []
-    rejected = 0
-    for job in jobs:
-        url = job.get("url", "")
-        if url and not url_is_alive(url, timeout):
-            rejected += 1
-            logger.info(
-                "[pipeline] Skipping dead URL before enrichment: %s @ %s",
-                job.get("title", "?")[:50],
-                job.get("company", "?"),
-            )
-            continue
-        alive.append(job)
-
-    if rejected:
-        logger.info("[pipeline] Dropped %s dead URL(s) before enrichment", rejected)
-    return alive
-
-
-# ── Match processing ───────────────────────────────────────────────────────────
 
 def _process_match(match: dict) -> bool:
     """
     Tailor, compile PDF, and write cover letter for a single matched job.
     Returns True on full success, False if a critical step fails.
-    PDF compilation is non-critical — failure there does not abort the job.
+    PDF compilation is non-critical; failure there does not abort the job.
     """
     job = match["job"]
     slug = f"{TODAY}_{slugify(job['company'])}_{slugify(job['title'])}"
@@ -401,25 +175,25 @@ def _process_match(match: dict) -> bool:
         tex_path.write_text(tailor(match), encoding="utf-8")
         logger.info("  resume tailored")
     except Exception as e:
-        logger.error(f"  tailoring failed: {e}")
+        logger.error("  tailoring failed: %s", e)
         return False
 
     logger.info("  Compiling PDF...")
     try:
         pdf = compile_tex(str(tex_path), str(job_dir))
-        logger.info(f"  PDF {'generated' if pdf else '(LaTeX saved, no PDF)'}")
+        logger.info("  PDF %s", "generated" if pdf else "(LaTeX saved, no PDF)")
     except Exception as e:
-        logger.warning(f"  PDF compilation failed: {e} — continuing")
+        logger.warning("  PDF compilation failed: %s - continuing", e)
 
     logger.info("  Writing cover letter...")
     try:
         write_cover(match, str(job_dir))
         logger.info("  cover letter written")
     except Exception as e:
-        logger.error(f"  cover letter failed: {e}")
+        logger.error("  cover letter failed: %s", e)
         return False
 
-    logger.info(f"  complete → jobs/{slug}/")
+    logger.info("  complete -> jobs/%s/", slug)
     return True
 
 
@@ -430,36 +204,47 @@ def _process_jobs(
     skip_score: bool,
     max_years: int,
     api_cfg: dict,
+    url_checker=None,
 ) -> list[dict]:
     """
-    Shared downstream pipeline: validate → score → tailor → cover → PDF.
+    Shared downstream pipeline: validate, score, tailor, cover, PDF.
     Returns the list of successfully processed match dicts.
     """
     if not skip_validate:
-        logger.info(f"[pipeline] Validating {len(jobs)} job(s)...")
-        jobs, rejected = validate(jobs, max_years=max_years, api_cfg=api_cfg)
-        for j in rejected:
-            logger.info(f"  Rejected: {j.get('title')} @ {j.get('company')}: {j.get('_rejection_reason')}")
+        logger.info("[pipeline] Validating %s job(s)...", len(jobs))
+        jobs, rejected = validate(
+            jobs,
+            max_years=max_years,
+            api_cfg=api_cfg,
+            url_checker=url_checker or UrlLivenessCache().is_alive,
+        )
+        for job in rejected:
+            logger.info(
+                "  Rejected: %s @ %s: %s",
+                job.get("title"),
+                job.get("company"),
+                job.get("_rejection_reason"),
+            )
         if not jobs:
             logger.warning("[pipeline] All jobs rejected during validation.")
             return []
-        logger.info(f"[pipeline] {len(jobs)} job(s) passed validation")
+        logger.info("[pipeline] %s job(s) passed validation", len(jobs))
     else:
         logger.info("[pipeline] Validation skipped (--skip-validate)")
 
     if skip_score:
-        logger.info("[pipeline] Scoring skipped (--skip-score) — processing all")
-        matches = [{"job": j, "score": 0, "matched_keywords": [], "gaps": []} for j in jobs]
+        logger.info("[pipeline] Scoring skipped (--skip-score) - processing all")
+        matches = [{"job": job, "score": 0, "matched_keywords": [], "gaps": []} for job in jobs]
     else:
-        logger.info(f"[pipeline] Scoring {len(jobs)} job(s)...")
+        logger.info("[pipeline] Scoring %s job(s)...", len(jobs))
         matches = filter_matches(jobs)
         if not matches:
             logger.warning("[pipeline] No jobs passed the scoring threshold.")
             return []
-        logger.info(f"[pipeline] {len(matches)} job(s) passed scoring")
+        logger.info("[pipeline] %s job(s) passed scoring", len(matches))
 
     if len(matches) > MAX_TAILORING_PER_RUN:
-        matches = sorted(matches, key=lambda m: m.get("score", 0), reverse=True)
+        matches = sorted(matches, key=lambda match: match.get("score", 0), reverse=True)
         logger.info(
             "[pipeline] Hard limit: tailoring top %s of %s matched job(s)",
             MAX_TAILORING_PER_RUN,
@@ -467,28 +252,30 @@ def _process_jobs(
         )
         matches = matches[:MAX_TAILORING_PER_RUN]
 
-    logger.info(f"[pipeline] Processing {len(matches)} matched job(s)...")
+    logger.info("[pipeline] Processing %s matched job(s)...", len(matches))
     processed = []
     for idx, match in enumerate(matches, 1):
         job = match["job"]
         logger.info(
-            f"[pipeline] [{idx}/{len(matches)}] "
-            f"{job['title']} @ {job['company']} (score={match['score']})"
+            "[pipeline] [%s/%s] %s @ %s (score=%s)",
+            idx,
+            len(matches),
+            job["title"],
+            job["company"],
+            match["score"],
         )
         try:
             if _process_match(match):
                 processed.append(match)
         except Exception as e:
-            logger.error(f"  Unexpected error: {e}", exc_info=True)
+            logger.error("  Unexpected error: %s", e, exc_info=True)
 
     return processed
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────────
-
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="Job hunt pipeline — hunt or tailor specific links.",
+    parser = argparse.ArgumentParser(
+        description="Job hunt pipeline - hunt or tailor specific links.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -498,42 +285,40 @@ Examples:
   python scripts/pipeline/orchestrator.py --mode tailor-links --skip-score --force
         """,
     )
-    p.add_argument(
+    parser.add_argument(
         "--mode",
         choices=["hunt", "tailor-links"],
         default="hunt",
         help="hunt: scrape configured companies (default). tailor-links: process specific URLs.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--links",
         metavar="URLS",
-        help="Comma-separated job URLs for tailor-links mode. "
-             "Falls back to TAILOR_LINKS env var if omitted.",
+        help="Comma-separated job URLs for tailor-links mode. Falls back to TAILOR_LINKS env var.",
     )
-    p.add_argument(
+    parser.add_argument(
         "--region",
-        help="Optional search_config.yml region key for hunt mode, e.g. berlin. "
-             "Omit to scrape all enabled regions.",
+        help="Optional search_config.yml region key for hunt mode, e.g. berlin. Omit for all enabled regions.",
     )
-    p.add_argument("--skip-score",    action="store_true", help="Bypass scoring threshold")
-    p.add_argument("--skip-validate", action="store_true", help="Bypass validation checks")
-    p.add_argument("--force",         action="store_true", help="Re-process already-tracked jobs")
-    return p
+    parser.add_argument("--skip-score", action="store_true", help="Bypass scoring threshold")
+    parser.add_argument("--skip-validate", action="store_true", help="Bypass validation checks")
+    parser.add_argument("--force", action="store_true", help="Re-process already-tracked jobs")
+    return parser
 
 
 def run(args: argparse.Namespace) -> int:
-    logger.info(f"\n{'='*60}")
+    logger.info("\n%s", "=" * 60)
     region_label = args.region if args.mode == "hunt" and args.region else "all"
-    logger.info(f"Pipeline | mode={args.mode} | region={region_label} | {TODAY}")
-    logger.info(f"{'='*60}")
+    logger.info("Pipeline | mode=%s | region=%s | %s", args.mode, region_label, TODAY)
+    logger.info("%s", "=" * 60)
 
     api_cfg = load_api_config()
+    url_liveness = UrlLivenessCache()
     scoring_cfg = yaml.safe_load(
         open(os.path.join(ROOT, "config", "scoring_config.yml"), encoding="utf-8")
     )
     max_years = scoring_cfg.get("scoring", {}).get("max_years_experience_required", 4)
 
-    # ── Source jobs ────────────────────────────────────────────────────────────
     if args.mode == "hunt":
         logger.info("[pipeline] Step 1: Scraping and deduplicating jobs...")
         jobs, existing_urls, existing_titles = _jobs_from_hunt(args.region)
@@ -541,7 +326,11 @@ def run(args: argparse.Namespace) -> int:
             logger.warning("[pipeline] No new jobs found. Exiting.")
             return 0
 
-        jobs = _drop_dead_urls_before_enrichment(jobs, api_cfg)
+        jobs = _drop_dead_urls_before_enrichment(
+            jobs,
+            api_cfg,
+            url_liveness.is_alive,
+        )
         if not jobs:
             logger.warning("[pipeline] All scraped jobs failed URL verification before enrichment.")
             return 0
@@ -549,7 +338,7 @@ def run(args: argparse.Namespace) -> int:
         logger.info("[pipeline] Step 1b: Enriching sparse job descriptions...")
         jobs = _enrich_snippets(jobs, api_cfg)
 
-    else:  # tailor-links
+    else:
         raw_links = args.links or os.environ.get("TAILOR_LINKS", "")
         if not raw_links:
             logger.error(
@@ -564,26 +353,25 @@ def run(args: argparse.Namespace) -> int:
             logger.warning("[pipeline] No jobs fetched. Exiting.")
             return 2
 
-    logger.info(f"[pipeline] {len(jobs)} job(s) ready for processing")
+    logger.info("[pipeline] %s job(s) ready for processing", len(jobs))
 
-    # ── Shared downstream pipeline ─────────────────────────────────────────────
     processed = _process_jobs(
         jobs,
         skip_validate=args.skip_validate,
         skip_score=args.skip_score,
         max_years=max_years,
         api_cfg=api_cfg,
+        url_checker=url_liveness.is_alive,
     )
 
-    # ── Finalise ───────────────────────────────────────────────────────────────
     if processed:
         logger.info("[pipeline] Updating README and tracker...")
         update_readme(processed)
-        mark_processed([m["job"] for m in processed], existing_urls, existing_titles)
+        mark_processed([match["job"] for match in processed], existing_urls, existing_titles)
 
-    logger.info(f"\n{'='*60}")
-    logger.info(f"[pipeline] Done. {len(processed)} job(s) processed.")
-    logger.info(f"{'='*60}\n")
+    logger.info("\n%s", "=" * 60)
+    logger.info("[pipeline] Done. %s job(s) processed.", len(processed))
+    logger.info("%s\n", "=" * 60)
     return 0
 
 

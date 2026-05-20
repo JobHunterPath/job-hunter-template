@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.5 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `7d1b638` Merge branch 'main' of https://github.com/abdulrbasit/Abdul.Basit_Resume
+
+
 ## 2.11.4 - 2026-05-19
 
 - Synced reusable template updates from the private source repository.

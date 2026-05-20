@@ -2,14 +2,21 @@
 Shared utility functions used across pipeline stages.
 """
 
+from html import unescape
 import re
 import requests
 
 
 def strip_html(text: str) -> str:
     """Remove HTML tags and collapse whitespace to plain text."""
+    text = re.sub(
+        r"<(script|style|noscript)[^>]*>.*?</(script|style|noscript)>",
+        " ",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
     text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", unescape(text)).strip()
 
 
 def location_matches(location_str: str, target: str) -> bool:

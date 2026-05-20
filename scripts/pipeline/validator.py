@@ -12,11 +12,15 @@ calls on dead or obviously unsuitable postings.
 
 import json
 import logging
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import Callable
 
 from core.config import load_api_config
 from core.llm_client import get_llm_client
+from core.llm_utils import extract_json_object, get_llm_role_settings
+from core.metrics import timed_stage
 from core.utils import url_is_alive
 
 logger = logging.getLogger(__name__)
@@ -44,11 +48,53 @@ Snippet:
 
 Return JSON: {{"is_active": bool, "over_experience": bool, "reason": "one-line reason if rejected, else null"}}"""
 
+_INACTIVE_MARKERS = (
+    "no longer available",
+    "this job has expired",
+    "position has been filled",
+    "job is no longer",
+    "not accepting applications",
+    "this listing has closed",
+    "role has been filled",
+    "vacancy has been filled",
+)
+
+_EXPERIENCE_PATTERNS = (
+    re.compile(
+        r"\b(?:minimum|min\.?|at least|required|requires|requirement|must have|you have|you bring)"
+        r"[^.\n]{0,80}?\b(\d{1,2})\+?\s*(?:years|yrs)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(\d{1,2})\+?\s*(?:years|yrs)\b[^.\n]{0,80}?"
+        r"\b(?:minimum|min\.?|required|requires|requirement|must have|experience)\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def deterministic_rejection_reason(snippet: str, max_years: int) -> str | None:
+    """Reject only explicit inactive postings or explicit requirements above max_years."""
+    lower = snippet.lower()
+    for marker in _INACTIVE_MARKERS:
+        if marker in lower:
+            return marker
+
+    for pattern in _EXPERIENCE_PATTERNS:
+        for match in pattern.finditer(snippet):
+            years = int(match.group(1))
+            if years > max_years:
+                return f"requires {years}+ years experience"
+
+    return None
+
 
 def validate(
     jobs: list[dict],
     max_years: int,
     api_cfg: dict | None = None,
+    *,
+    url_checker: Callable[[str, int], bool] = url_is_alive,
 ) -> tuple[list[dict], list[dict]]:
     """
     Returns (valid_jobs, rejected_jobs).
@@ -60,9 +106,10 @@ def validate(
     if api_cfg is None:
         api_cfg = load_api_config()
 
-    llm = api_cfg.get("llm", {})
-    model = llm.get("models", {}).get("validation", "claude-haiku-4-5-20251001")
-    max_tokens = llm.get("max_tokens", {}).get("validation", 200)
+    settings = get_llm_role_settings(
+        "validation",
+        api_cfg=api_cfg,
+    )
 
     url_cfg = api_cfg.get("http", {}).get("url_verification", {})
     check_urls = url_cfg.get("enabled", True)
@@ -88,7 +135,7 @@ def validate(
         logger.info(prefix)
 
         # 1 -- URL reachability
-        if check_urls and url and not url_is_alive(url, url_timeout):
+        if check_urls and url and not url_checker(url, url_timeout):
             logger.info(f"{prefix}: dead URL: {url[:80]}")
             with results_lock:
                 results.append((idx_orig, "rejected", {**job, "_rejection_reason": "dead_url"}))
@@ -101,20 +148,22 @@ def validate(
                 results.append((idx_orig, "valid", job))
             return
 
+        deterministic_reason = deterministic_rejection_reason(snippet, max_years)
+        if deterministic_reason:
+            logger.info(f"{prefix}: deterministic reject: {deterministic_reason}")
+            with results_lock:
+                results.append((idx_orig, "rejected", {**job, "_rejection_reason": deterministic_reason}))
+            return
+
         try:
             prompt = _PROMPT.format(max_years=max_years, snippet=snippet)
             raw = get_llm_client("validation").complete(
                 system=_SYSTEM,
                 user=prompt,
-                model=model,
-                max_tokens=max_tokens,
+                model=settings.model,
+                max_tokens=settings.max_tokens,
             )
-            if raw.startswith("```"):
-                lines = raw.splitlines()
-                raw = "\n".join(
-                    lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-                ).strip()
-            result = json.loads(raw)
+            result = json.loads(extract_json_object(raw))
 
             if not result.get("is_active", True):
                 reason = result.get("reason", "inactive")
@@ -139,8 +188,9 @@ def validate(
             with results_lock:
                 results.append((idx_orig, "valid", job))
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        list(executor.map(_validate_job, enumerate(jobs)))
+    with timed_stage(logger, "validation", jobs=len(jobs), max_workers=max_workers):
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            list(executor.map(_validate_job, enumerate(jobs)))
 
     results.sort(key=lambda t: t[0])
     valid = [job for _, kind, job in results if kind == "valid"]

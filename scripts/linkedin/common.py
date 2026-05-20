@@ -11,8 +11,9 @@ from typing import Any
 
 import yaml
 
-from core.config import ROOT, load_api_config, profile_path
+from core.config import ROOT, profile_path
 from core.llm_client import get_llm_client
+from core.llm_utils import get_llm_role_settings
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +65,8 @@ def story_bank_text() -> str:
 
 
 def linkedin_model_settings() -> tuple[str, int]:
-    api_cfg = load_api_config()
-    llm = api_cfg.get("llm", {})
-    models = llm.get("models", {})
-    max_tokens = llm.get("max_tokens", {})
-    return (
-        models.get("linkedin") or models.get("discovery") or "claude-sonnet-4-6",
-        int(max_tokens.get("linkedin") or max_tokens.get("discovery") or 1200),
-    )
+    settings = get_llm_role_settings("linkedin")
+    return settings.model, settings.max_tokens
 
 
 def complete_linkedin(system: str, user: str) -> str:

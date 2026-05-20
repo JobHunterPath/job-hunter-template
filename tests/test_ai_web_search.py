@@ -1,3 +1,6 @@
+import sys
+from types import SimpleNamespace
+
 from sources import ai_web_search
 
 
@@ -213,3 +216,49 @@ def test_build_rule_context_includes_compact_search_config_rules():
     assert "Reject excluded title terms: engineer" in context
     assert "Reject seniority flags: director" in context
     assert "Reject stale/closed indicators: no longer available" in context
+
+
+def test_provider_secret_is_cached(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        ai_web_search,
+        "load_api_config",
+        lambda: {"secrets": {"anthropic": {"env_var": "ANTHROPIC_API_KEY", "required": True}}},
+    )
+    monkeypatch.setattr(
+        ai_web_search,
+        "get_secret",
+        lambda env_var, required=True: calls.append((env_var, required)) or "secret",
+    )
+    ai_web_search._SECRET_CACHE.clear()
+
+    assert ai_web_search._provider_secret("anthropic") == "secret"
+    assert ai_web_search._provider_secret("anthropic") == "secret"
+
+    assert calls == [("ANTHROPIC_API_KEY", True)]
+
+
+def test_anthropic_web_search_client_is_reused(monkeypatch):
+    instances = []
+
+    class FakeAnthropic:
+        def __init__(self, api_key):
+            instances.append(api_key)
+            self.messages = SimpleNamespace(create=self.create)
+
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text='[{"title": "Product Owner"}]')]
+            )
+
+    monkeypatch.setitem(sys.modules, "anthropic", SimpleNamespace(Anthropic=FakeAnthropic))
+    monkeypatch.setattr(ai_web_search, "_provider_secret", lambda provider: "cached-key")
+    ai_web_search._ANTHROPIC_CLIENTS.clear()
+
+    first = ai_web_search._complete_with_web_search("anthropic", "model", "query 1", 100)
+    second = ai_web_search._complete_with_web_search("anthropic", "model", "query 2", 100)
+
+    assert first == '[{"title": "Product Owner"}]'
+    assert second == '[{"title": "Product Owner"}]'
+    assert instances == ["cached-key"]

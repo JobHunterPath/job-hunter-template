@@ -17,8 +17,9 @@ import re
 import requests
 from typing import Optional
 
-from core.config import load_api_config
 from core.llm_client import get_llm_client
+from core.llm_utils import extract_json_object, get_llm_role_settings
+from core.utils import strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -98,24 +99,6 @@ def _fetch_html(url: str, timeout: int = 12) -> Optional[str]:
     return None
 
 
-def _strip_html(html: str) -> str:
-    """Strip HTML tags and collapse whitespace to plain text."""
-    html = re.sub(
-        r"<(script|style|noscript)[^>]*>.*?</(script|style|noscript)>",
-        " ",
-        html,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    html = re.sub(r"<[^>]+>", " ", html)
-    for entity, char in [
-        ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
-        ("&nbsp;", " "), ("&#39;", "'"), ("&quot;", '"'),
-        ("&mdash;", "—"), ("&ndash;", "–"), ("&hellip;", "…"),
-    ]:
-        html = html.replace(entity, char)
-    return re.sub(r"\s+", " ", html).strip()
-
-
 def _fetch_playwright(url: str, timeout_ms: int = 20_000) -> Optional[str]:
     """Render a JS-gated page with Playwright and return plain text.
 
@@ -142,7 +125,7 @@ def _fetch_playwright(url: str, timeout_ms: int = 20_000) -> Optional[str]:
                 )
                 page.goto(url, wait_until="networkidle", timeout=timeout_ms)
                 html = page.content()
-                return _strip_html(html)
+                return strip_html(html)
             finally:
                 browser.close()
     except Exception as e:
@@ -152,26 +135,16 @@ def _fetch_playwright(url: str, timeout_ms: int = 20_000) -> Optional[str]:
 
 def _llm_extract(text: str, url: str) -> dict:
     """Use an LLM to extract title, company, and description from page text."""
-    api_cfg = load_api_config()
-    llm = api_cfg.get("llm", {})
-    model = llm.get("models", {}).get("jd_extraction")
-    max_tokens = llm.get("max_tokens", {}).get("jd_extraction")
-    if not model or not max_tokens:
-        raise KeyError("Missing api_config.yml keys: llm.models.jd_extraction / llm.max_tokens.jd_extraction")
+    settings = get_llm_role_settings("jd_extraction")
 
     try:
         raw = get_llm_client("jd_extraction").complete(
             system=_EXTRACT_SYSTEM,
             user=_EXTRACT_PROMPT.format(text=text[:8000], url=url),
-            model=model,
-            max_tokens=max_tokens,
+            model=settings.model,
+            max_tokens=settings.max_tokens,
         )
-        if raw.startswith("```"):
-            lines = raw.splitlines()
-            raw = "\n".join(
-                lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-            ).strip()
-        return json.loads(raw)
+        return json.loads(extract_json_object(raw))
     except Exception as e:
         logger.warning(f"[jd_fetcher] Extraction failed ({e}); falling back to raw text")
         return {}
@@ -221,7 +194,7 @@ def fetch_jd(url: str, use_llm: bool = True) -> Optional[dict]:
     if not html:
         return None
 
-    plain_text = _strip_html(html)
+    plain_text = strip_html(html)
 
     if len(plain_text) < _MIN_TEXT_LENGTH:
         logger.info(

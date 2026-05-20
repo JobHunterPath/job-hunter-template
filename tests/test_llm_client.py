@@ -1,6 +1,8 @@
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
+from core import llm_client
 from core.llm_client import LLMClient
 
 
@@ -36,3 +38,32 @@ def test_throttle_waits_when_window_is_full(monkeypatch):
 
     sleep.assert_called_once_with(40.0)
     assert list(client._call_timestamps) == [101.0, 160.1]
+
+
+def test_get_llm_client_cache_is_thread_safe(monkeypatch):
+    created = []
+    config = {
+        "llm": {
+            "default_provider": "ollama",
+            "providers": {"validation": "ollama"},
+            "rate_limits": {"ollama": {"requests_per_minute": 4}},
+        },
+        "ollama": {"base_url": "http://localhost:11434"},
+        "secrets": {},
+    }
+
+    class FakeClient:
+        def __init__(self, provider, api_key="", base_url="", requests_per_minute=0):
+            created.append((provider, api_key, base_url, requests_per_minute))
+
+    monkeypatch.setattr("core.config.load_api_config", lambda: config)
+    monkeypatch.setattr("core.config.get_secret", lambda *args, **kwargs: "")
+    monkeypatch.setattr(llm_client, "LLMClient", FakeClient)
+    monkeypatch.setattr(llm_client, "_cache", {})
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        clients = list(executor.map(lambda _: llm_client.get_llm_client("validation"), range(20)))
+
+    assert len(created) == 1
+    assert len({id(client) for client in clients}) == 1
+    assert created == [("ollama", "", "http://localhost:11434", 4)]
