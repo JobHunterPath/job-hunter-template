@@ -1099,7 +1099,7 @@ code, workflows, dependencies, and docs.
 5. Keep `upstream_branch` as `main`.
 6. Leave `update_config` off unless you intentionally want template config files.
 7. Leave `update_linkedin` off unless you intentionally want the starter LinkedIn workspace.
-8. Wait for the workflow to commit the template update to the selected branch.
+8. Wait for the workflow to merge the template update into the selected branch.
 9. Pull the updated branch locally:
 
 ```bash
@@ -1107,24 +1107,31 @@ git checkout main
 git pull origin main
 ```
 
-### If The Template Update Has Conflicts
+The workflow fetches `upstream_branch` from the private template repo, imports
+the maintained template paths, and creates a merge commit with both your current
+branch and the template branch as parents. This connects your clone to the
+template history, similar to running `git fetch upstream` and merging with
+`--allow-unrelated-histories`, while still preserving personal paths by default.
 
-Conflicts mean Git cannot safely combine your files with the template update
-without a decision from you. This usually happens when both your repo and the
-template changed the same maintained file. The workflow will fail before pushing
-partial changes.
+The maintained paths include code, tests, workflows, docs, dependencies, and
+shared LaTeX support files. Personal files are not in the default update path
+list, so they are left alone unless you turn on `update_config` or
+`update_linkedin`.
+
+### If The Template Update Fails
 
 Recommended option for non-technical users:
 
 1. Do not rerun the workflow repeatedly without changing anything.
-2. Ask a technical person to update your repo locally.
+2. Ask a technical person to check the workflow log and update your repo locally
+   if needed.
 3. Tell them your personal files should be protected:
    - resume `.tex` files
    - `story_bank.md`
    - `project_instructions.md`
    - files in `jobs/`
    - your personal config files, unless you intentionally enabled `update_config`
-4. After they resolve the conflicts and push the update, run:
+4. After they push the update, run:
 
 ```bash
 git checkout main
@@ -1135,10 +1142,20 @@ If the workflow cannot read the private template repo, confirm this repo has a
 `TEMPLATE_REPO_PAT` secret with read access to
 `Job-Network-Projects/job-hunter-template`.
 
+If the log shows `403` or `Write access to repository not granted` while fetching
+the template repo, GitHub rejected `TEMPLATE_REPO_PAT` for the private template.
+Recreate that token with `Job-Network-Projects` as the resource owner, select
+only `job-hunter-template`, and grant **Contents: Read-only** and **Metadata:
+Read-only**.
+
 If the workflow can read the template but cannot push the update, confirm this
 repo has a `GH_PAT` secret with **Contents** and **Workflows** set to **Read and
 write**. The workflow updates maintained files under `.github/workflows/`, so
 workflow permission is required on this repository.
+
+If the push is rejected because the selected branch is protected, either allow
+GitHub Actions or the `GH_PAT` user to push to that branch, or run the workflow
+from a branch where direct pushes are allowed and merge that branch manually.
 
 The update workflow preserves resumes, story bank, project instructions,
 generated jobs, config files, and LinkedIn workspace files by default.
