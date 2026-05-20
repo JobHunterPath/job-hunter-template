@@ -37,7 +37,7 @@ def test_compile_tex_returns_pdf_path_when_pdflatex_succeeds(tmp_path):
     assert result == str(expected_pdf)
 
 
-def test_compile_tex_copies_configured_profile_assets(tmp_path):
+def test_compile_tex_runs_from_output_dir_without_copying_assets(tmp_path):
     tex = tmp_path / 'resume.tex'
     tex.write_text(r'\documentclass{article}\begin{document}x\end{document}')
     image = tmp_path / 'Profile-2025.png'
@@ -48,17 +48,14 @@ def test_compile_tex_copies_configured_profile_assets(tmp_path):
     out_dir.mkdir()
     expected_pdf = out_dir / 'resume.pdf'
 
-    def fake_profile_path(key, default):
-        return image if key == 'profile_image' else cls
-
-    with patch('pipeline.pdf_compiler.profile_path', side_effect=fake_profile_path), \
-         patch('pipeline.pdf_compiler.shutil.which', return_value='/usr/bin/pdflatex'), \
-         patch('pipeline.pdf_compiler.subprocess.run', side_effect=_fake_run_creates_pdf(expected_pdf)):
+    with patch('pipeline.pdf_compiler.shutil.which', return_value='/usr/bin/pdflatex'), \
+         patch('pipeline.pdf_compiler.subprocess.run', side_effect=_fake_run_creates_pdf(expected_pdf)) as run:
         result = pdf_compiler.compile_tex(str(tex), str(out_dir))
 
     assert result == str(expected_pdf)
-    assert (out_dir / 'Profile-2025.png').read_bytes() == b'image'
-    assert (out_dir / 'altacv.cls').read_text() == 'class'
+    assert not (out_dir / 'Profile-2025.png').exists()
+    assert not (out_dir / 'altacv.cls').exists()
+    assert run.call_args.kwargs['cwd'] == str(out_dir)
 
 
 def test_compile_tex_returns_none_when_no_pdf_produced(tmp_path):

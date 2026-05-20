@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.3 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `c19b4b8` fix(latex): keep tailored job folders self-contained
+
+
 ## 2.12.2 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
