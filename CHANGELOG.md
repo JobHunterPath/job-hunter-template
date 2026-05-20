@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.1 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `769a1cd` chore(workflow): wire tailor_raw.yml into template repo sync
+
+
 ## 2.12.0 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
