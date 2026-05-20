@@ -1,0 +1,212 @@
+name: Tailor Raw JD
+
+# Manual-only — triggered from the GitHub Actions UI.
+# Paste a full job description into the JD field.
+# Title and Company are optional; if omitted the LLM extracts them from the text.
+# The pipeline scores the JD, tailors the resume, generates a cover letter,
+# compiles PDFs, and commits results.
+
+on:
+  workflow_dispatch:
+    inputs:
+      jd:
+        description: 'Job description (paste full text)'
+        required: true
+        type: string
+      title:
+        description: 'Job title override (optional — inferred by LLM if blank)'
+        required: false
+        default: ''
+        type: string
+      company:
+        description: 'Company name override (optional — inferred by LLM if blank)'
+        required: false
+        default: ''
+        type: string
+      skip_score:
+        description: 'Skip scoring threshold — tailor regardless of fit score'
+        required: false
+        default: false
+        type: boolean
+      skip_validate:
+        description: 'Skip URL reachability and freshness validation'
+        required: false
+        default: false
+        type: boolean
+      force:
+        description: 'Re-tailor if this JD was already processed'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  tailor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Resolve prebuilt runner image
+        id: runner_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/job-hunt-runner:latest"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Using prebuilt runner image: $image"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+          fi
+
+      - name: Set up Python
+        if: steps.runner_image.outputs.available != 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        if: steps.runner_image.outputs.available != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Python dependencies
+        if: steps.runner_image.outputs.available != 'true'
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        if: steps.runner_image.outputs.available != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        if: steps.runner_image.outputs.available != 'true'
+        run: playwright install chromium --with-deps
+
+      - name: Install LaTeX
+        if: steps.runner_image.outputs.available != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-pictures \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            lmodern
+
+      - name: Build flags
+        id: flags
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.skip_score }}" = "true" ];    then FLAGS="$FLAGS --skip-score";    fi
+          if [ "${{ github.event.inputs.skip_validate }}" = "true" ]; then FLAGS="$FLAGS --skip-validate"; fi
+          if [ "${{ github.event.inputs.force }}" = "true" ];         then FLAGS="$FLAGS --force";         fi
+
+          TITLE_FLAG=""
+          if [ -n "${{ github.event.inputs.title }}" ]; then
+            TITLE_FLAG="--title ${{ github.event.inputs.title }}"
+          fi
+
+          COMPANY_FLAG=""
+          if [ -n "${{ github.event.inputs.company }}" ]; then
+            COMPANY_FLAG="--company ${{ github.event.inputs.company }}"
+          fi
+
+          echo "flags=$FLAGS" >> $GITHUB_OUTPUT
+          echo "title_flag=$TITLE_FLAG" >> $GITHUB_OUTPUT
+          echo "company_flag=$COMPANY_FLAG" >> $GITHUB_OUTPUT
+
+      - name: Run tailor-raw pipeline in prebuilt runner image
+        if: steps.runner_image.outputs.available == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          SEARXNG_BASE_URL: http://127.0.0.1:8080
+          RAW_JD: ${{ github.event.inputs.jd }}
+          LOG_LEVEL: INFO
+          RUNNER_IMAGE: ${{ steps.runner_image.outputs.image }}
+        run: |
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e ANTHROPIC_API_KEY \
+            -e OPENAI_API_KEY \
+            -e GOOGLE_API_KEY \
+            -e BRAVE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e EXA_API_KEY \
+            -e SEARXNG_BASE_URL \
+            -e RAW_JD \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            bash -lc 'printf "%s" "$RAW_JD" | PYTHONPATH=/workspace/scripts python scripts/pipeline/orchestrator.py --mode tailor-raw --jd - ${{ steps.flags.outputs.title_flag }} ${{ steps.flags.outputs.company_flag }} ${{ steps.flags.outputs.flags }}'
+
+      - name: Run tailor-raw pipeline natively
+        if: steps.runner_image.outputs.available != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          SEARXNG_BASE_URL: http://127.0.0.1:8080
+          RAW_JD: ${{ github.event.inputs.jd }}
+          LOG_LEVEL: INFO
+        run: |
+          printf "%s" "$RAW_JD" | \
+            PYTHONPATH=$GITHUB_WORKSPACE/scripts \
+            python scripts/pipeline/orchestrator.py --mode tailor-raw --jd - \
+              ${{ steps.flags.outputs.title_flag }} \
+              ${{ steps.flags.outputs.company_flag }} \
+              ${{ steps.flags.outputs.flags }}
+
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tailor-raw-logs-${{ github.run_id }}
+          path: job_hunt.log
+          retention-days: 30
+
+      - name: Commit results
+        run: |
+          git config user.name "job-hunt-bot"
+          git config user.email "bot@job-hunt"
+          git add README.md config/applied_jobs.yml config/search_config.yml
+          find jobs -maxdepth 2 -type f \( \
+            -name meta.json -o \
+            -name jd.md -o \
+            -name cover_letter.md -o \
+            -name resume_tailored.tex -o \
+            -name resume_tailored.pdf -o \
+            -name cover_letter.pdf \
+          \) -print0 | xargs -0 -r git add --
+          git diff --staged --quiet || git commit -m "tailor: $(date +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push
