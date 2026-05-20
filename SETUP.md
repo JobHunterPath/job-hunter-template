@@ -866,7 +866,7 @@ Do not paste API keys into files.
 ### Create `GH_PAT`
 
 `GH_PAT` is required for GitHub Actions to save generated files back into your
-private repository.
+private repository and apply future template updates.
 
 1. Open GitHub.
 2. Click your profile picture.
@@ -875,7 +875,9 @@ private repository.
 5. Click **Generate new token**.
 6. Name it `job-hunt-actions`.
 7. Set **Repository access** to only this private repo.
-8. Set **Contents** to **Read and write**.
+8. Set these repository permissions:
+   - **Contents**: **Read and write**
+   - **Workflows**: **Read and write**
 9. Generate the token and copy it immediately.
 
 If fine-grained tokens are blocked, use a classic token with the `repo` scope.
@@ -1097,60 +1099,51 @@ code, workflows, dependencies, and docs.
 5. Keep `upstream_branch` as `main`.
 6. Leave `update_config` off unless you intentionally want template config files.
 7. Leave `update_linkedin` off unless you intentionally want the starter LinkedIn workspace.
-8. Wait for the workflow to open a pull request.
-9. Review and merge the pull request.
-10. Pull the merged changes locally:
+8. Wait for the workflow to commit the template update to the selected branch.
+9. Pull the updated branch locally:
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-### If The Update Pull Request Has Conflicts
+### If The Template Update Has Conflicts
 
-Conflicts mean GitHub cannot safely combine your files with the template update
+Conflicts mean Git cannot safely combine your files with the template update
 without a decision from you. This usually happens when both your repo and the
-template changed the same maintained file.
+template changed the same maintained file. The workflow will fail before pushing
+partial changes.
 
 Recommended option for non-technical users:
 
-1. Do not click random conflict buttons.
-2. Ask a technical person to review the pull request.
+1. Do not rerun the workflow repeatedly without changing anything.
+2. Ask a technical person to update your repo locally.
 3. Tell them your personal files should be protected:
    - resume `.tex` files
    - `story_bank.md`
    - `project_instructions.md`
    - files in `jobs/`
    - your personal config files, unless you intentionally enabled `update_config`
-4. After they resolve the conflicts and merge the PR, run:
+4. After they resolve the conflicts and push the update, run:
 
 ```bash
 git checkout main
 git pull origin main
 ```
 
-If you want to resolve conflicts yourself in GitHub:
-
-1. Open the update pull request.
-2. Click **Resolve conflicts** if GitHub shows the button.
-3. For each conflicted file, choose the template version for maintained files
-   such as `scripts/`, `tests/`, workflows, `README.md`, and `SETUP.md`.
-4. Keep your version for personal files such as resumes, story bank, project
-   instructions, generated jobs, and configs.
-5. Remove all conflict marker lines. They are the lines that start with
-   `<<<<<<<`, `=======`, or `>>>>>>>`.
-
-6. Click **Mark as resolved**.
-7. Merge the pull request only after the files look correct.
-
 If the workflow cannot read the private template repo, confirm this repo has a
 `TEMPLATE_REPO_PAT` secret with read access to
 `Job-Network-Projects/job-hunter-template`.
 
+If the workflow can read the template but cannot push the update, confirm this
+repo has a `GH_PAT` secret with **Contents** and **Workflows** set to **Read and
+write**. The workflow updates maintained files under `.github/workflows/`, so
+workflow permission is required on this repository.
+
 The update workflow preserves resumes, story bank, project instructions,
 generated jobs, config files, and LinkedIn workspace files by default.
 
-The pull request uses semantic versioning from the template repo:
+The workflow summary uses semantic versioning from the template repo:
 
 - `PATCH`: fixes, cleanup, or documentation updates.
 - `MINOR`: backward-compatible new features.

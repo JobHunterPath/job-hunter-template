@@ -26,12 +26,12 @@ repo. Code fixes should come through a reviewed pull request to the shared
 template repo.
 
 For future updates, run **Actions -> Update From Template** in your own repo.
-It opens a pull request with the latest maintained template files while keeping
-your resume, story bank, generated jobs, and config files untouched by default.
-The pull request shows whether the template update is a patch, minor, or major
-version change.
-After merging that pull request, run `git pull origin main` locally. Detailed
-step-by-step update instructions are in [SETUP.md](SETUP.md#24-getting-future-template-updates).
+It commits the latest maintained template files to your selected branch while
+keeping your resume, story bank, generated jobs, and config files untouched by
+default. The workflow summary shows whether the template update is a patch,
+minor, or major version change. After it finishes, run `git pull origin main`
+locally. Detailed step-by-step update instructions are in
+[SETUP.md](SETUP.md#24-getting-future-template-updates).
 
 The GitHub workflows use your repo's own GHCR runner image with Python,
 Playwright, and LaTeX already installed. The image is rebuilt automatically when

@@ -26,7 +26,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update:
@@ -37,11 +36,12 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT || github.token }}
 
-      - name: Copy template updates into a pull request branch
+      - name: Copy template updates into this branch
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           TEMPLATE_REPO_PAT: ${{ secrets.TEMPLATE_REPO_PAT }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
@@ -53,21 +53,33 @@ jobs:
           git config user.name "template-update-bot"
           git config user.email "template-update-bot@users.noreply.github.com"
 
-          git remote remove upstream 2>/dev/null || true
-          if [ -n "${TEMPLATE_REPO_PAT}" ]; then
-            git remote add upstream "https://x-access-token:${TEMPLATE_REPO_PAT}@github.com/${UPSTREAM_REPO}.git"
-          else
-            git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
-          fi
-
-          if ! git fetch upstream "${UPSTREAM_BRANCH}"; then
-            echo "::error::Could not fetch ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
-            echo "::error::If the template repository is private, add a TEMPLATE_REPO_PAT repository secret with read access to ${UPSTREAM_REPO}."
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::GH_PAT is not available to this workflow run."
+            echo "::error::Add GH_PAT as a repository secret with Contents and Workflows read/write access to this repository."
             exit 1
           fi
 
-          branch="template-update/${GITHUB_RUN_ID}"
-          git checkout -b "$branch"
+          if [ -z "${TEMPLATE_REPO_PAT}" ]; then
+            echo "::error::TEMPLATE_REPO_PAT is not available to this workflow run."
+            echo "::error::Add TEMPLATE_REPO_PAT as a repository secret with read access to the private template repository."
+            exit 1
+          fi
+
+          UPSTREAM_REPO="${UPSTREAM_REPO#https://github.com/}"
+          UPSTREAM_REPO="${UPSTREAM_REPO#http://github.com/}"
+          UPSTREAM_REPO="${UPSTREAM_REPO%.git}"
+          UPSTREAM_REPO="${UPSTREAM_REPO%/}"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream "https://x-access-token:${TEMPLATE_REPO_PAT}@github.com/${UPSTREAM_REPO}.git"
+
+          if ! git fetch upstream "${UPSTREAM_BRANCH}"; then
+            echo "::error::Could not fetch ${UPSTREAM_REPO}@${UPSTREAM_BRANCH}."
+            echo "::error::Check that TEMPLATE_REPO_PAT can read ${UPSTREAM_REPO}, and that the workflow input is owner/repo."
+            exit 1
+          fi
 
           paths=(
             ".github/searxng"
@@ -145,30 +157,21 @@ jobs:
           fi
 
           git commit -m "$commit_title"
-          git push --force-with-lease origin "$branch"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
-          pr_body="$(mktemp)"
           {
-            echo "This PR updates the maintained template files from \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`."
+            echo "## Template update"
             echo
-            echo "Semantic versioning summary:"
+            echo "Updated maintained template files from \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`."
+            echo
+            echo "### Semantic versioning summary"
             echo
             echo "- Current version: \`${current_version:-unknown}\`"
             echo "- Upstream version: \`${upstream_version:-unknown}\`"
             echo "- Update type: \`${semver_level}\`"
             echo "- Meaning: $semver_summary"
             echo
-            echo "Versioning rules:"
-            echo
-            echo "- \`PATCH\`: fixes, cleanup, or documentation updates."
-            echo "- \`MINOR\`: backward-compatible new features."
-            echo "- \`MAJOR\`: breaking setup, workflow, or config changes."
-            echo
-            if [ -n "$upstream_version" ]; then
-              echo "Template version: \`${upstream_version}\`"
-              echo
-            fi
-            echo "Personal files are preserved by default:"
+            echo "### Preserved by default"
             echo
             echo "- resumes"
             echo "- story bank"
@@ -176,36 +179,18 @@ jobs:
             echo "- generated jobs"
             echo "- config files, unless \`update_config\` was enabled"
             echo "- LinkedIn workspace, unless \`update_linkedin\` was enabled"
-            echo
             if [ "$semver_level" = "major" ]; then
-              echo "> Important: this is a major template update. Read the changelog and review setup/config changes before merging."
               echo
+              echo "> Important: this is a major template update. Read the changelog and review setup/config changes."
             fi
-            echo "Review the changed files, then merge this PR when ready."
             if [ -n "$changelog_excerpt" ]; then
               echo
-              echo "Recent template changelog:"
+              echo "### Recent template changelog"
               echo
               echo '```markdown'
               echo "$changelog_excerpt"
               echo '```'
             fi
-          } > "$pr_body"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
-          if [ -n "$upstream_version" ]; then
-            pr_title="chore: update job hunt template to v${upstream_version} (${semver_level})"
-          else
-            pr_title="chore: update from job hunt template"
-          fi
-
-          if [ -n "$existing_pr" ]; then
-            gh pr edit "$existing_pr" --title "$pr_title" --body-file "$pr_body"
-            echo "Updated existing PR #$existing_pr."
-          else
-            gh pr create \
-              --base "${GITHUB_REF_NAME}" \
-              --head "$branch" \
-              --title "$pr_title" \
-              --body-file "$pr_body"
-          fi
+          echo "Pushed template update to ${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}."
