@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.6 - 2026-05-20
+
+- Synced reusable template updates from the private source repository.
+
+Source commits:
+- `e7b99de` docs(setup): add Ollama local model guide
+
+
 ## 2.12.5 - 2026-05-20
 
 - Synced reusable template updates from the private source repository.
