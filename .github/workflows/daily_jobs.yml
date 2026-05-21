@@ -1,20 +1,19 @@
-name: Job Hunt Pipeline
+﻿name: Job Hunt Pipeline
 
 on:
   schedule:
-    # Daily job hunt slots. Slot 0 is the primary region and runs every weekday.
-    # Secondary regions run on Monday/Wednesday/Friday only. Keep one hunt cron
-    # per configured region slot; discovery has its own separate Monday cron.
+    # Slot 0: primary region, every weekday. Uncomment one secondary slot per
+    # additional enabled region. Discovery runs every Monday at 18:00 UTC.
     - cron: '0 4 * * 1-5'
     - cron: '0 5 * * 1,3,5'
-    - cron: '0 6 * * 1,3,5'
-    - cron: '0 7 * * 1,3,5'
-    - cron: '0 8 * * 1,3,5'
-    - cron: '0 9 * * 1,3,5'
-    - cron: '0 10 * * 1,3,5'
-    - cron: '0 11 * * 1,3,5'
-    - cron: '0 12 * * 1,3,5'
-    - cron: '0 13 * * 1,3,5'
+    #- cron: '0 6 * * 1,3,5'
+    #- cron: '0 7 * * 1,3,5'
+    #- cron: '0 8 * * 1,3,5'
+    #- cron: '0 9 * * 1,3,5'
+    #- cron: '0 10 * * 1,3,5'
+    #- cron: '0 11 * * 1,3,5'
+    #- cron: '0 12 * * 1,3,5'
+    #- cron: '0 13 * * 1,3,5'
     - cron: '0 18 * * 1'     # company discovery Mondays 18:00 UTC
   workflow_dispatch:
     inputs:
@@ -43,7 +42,7 @@ concurrency:
 
 jobs:
 
-  # ── Daily job hunt ─────────────────────────────────────────────────────────
+  # â”€â”€ Daily job hunt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   hunt:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -55,7 +54,26 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Resolve prebuilt runner image
+        id: runner_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
+        run: |
+          image="${CORE_IMAGE}"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Using job-hunter core image: $image"
+          else
+            echo "::error::Could not pull job-hunter core image: $image"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
+          fi
 
       - name: Resolve hunt region
         id: hunt_region
@@ -75,58 +93,24 @@ jobs:
             0 11 * * 1,3,5
             0 12 * * 1,3,5
             0 13 * * 1,3,5
-        run: python scripts/pipeline/resolve_hunt_region.py >> "$GITHUB_OUTPUT"
+          RUNNER_IMAGE: ${{ steps.runner_image.outputs.image }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e JOB_HUNTER_ROOT=/workspace \
+            -e EVENT_NAME \
+            -e EVENT_SCHEDULE \
+            -e INPUT_REGION \
+            -e HUNT_SCHEDULES \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            job-hunter resolve-hunt-region >> "$GITHUB_OUTPUT"
 
       - name: Skip empty region slot
         if: steps.hunt_region.outputs.should_run != 'true'
         run: echo "${{ steps.hunt_region.outputs.reason }}"
-
-      - name: Resolve prebuilt runner image
-        if: steps.hunt_region.outputs.should_run == 'true'
-        id: runner_image
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          repo="${GITHUB_REPOSITORY,,}"
-          image="ghcr.io/${repo}/job-hunt-runner:latest"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-
-          if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Using prebuilt runner image: $image"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
-          fi
-
-      - name: Set up Python
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Python dependencies
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        run: pip install -r requirements.txt
-
-      - name: Cache Playwright browsers
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Playwright browser
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        run: playwright install chromium --with-deps
 
       - name: Cache SearXNG image
         if: steps.hunt_region.outputs.should_run == 'true'
@@ -169,19 +153,6 @@ jobs:
           echo "SearXNG did not become ready; continuing with other providers"
           docker logs searxng || true
 
-      - name: Install LaTeX
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            texlive-latex-base \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-pictures \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            lmodern
-
       - name: Run daily hunt in prebuilt runner image
         if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available == 'true'
         env:
@@ -208,26 +179,11 @@ jobs:
             -e SEARXNG_BASE_URL \
             -e RAPIDAPI_KEY \
             -e LOG_LEVEL \
+            -e JOB_HUNTER_ROOT=/workspace \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w /workspace \
             "$RUNNER_IMAGE" \
-            bash -lc 'PYTHONPATH=/workspace/scripts python scripts/pipeline/orchestrator.py ${{ steps.hunt_region.outputs.arg }}'
-
-      - name: Run daily hunt natively
-        if: steps.hunt_region.outputs.should_run == 'true' && steps.runner_image.outputs.available != 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          SEARXNG_BASE_URL: http://127.0.0.1:8080
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          LOG_LEVEL: INFO
-        run: |
-          cd $GITHUB_WORKSPACE
-          PYTHONPATH=$GITHUB_WORKSPACE/scripts python scripts/pipeline/orchestrator.py ${{ steps.hunt_region.outputs.arg }}
+            job-hunter hunt ${{ steps.hunt_region.outputs.arg }}
 
       - name: Upload logs as artifact
         if: always() && steps.hunt_region.outputs.should_run == 'true'
@@ -256,15 +212,22 @@ jobs:
             if git pull --rebase origin main; then
               break
             fi
-            git rebase --abort
-            python3 scripts/pipeline/merge_tracker.py
+            git rebase --abort || true
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              -e HOME=/tmp \
+              -e JOB_HUNTER_ROOT=/workspace \
+              -v "$GITHUB_WORKSPACE:/workspace" \
+              -w /workspace \
+              "${{ steps.runner_image.outputs.image }}" \
+              job-hunter merge-tracker
             git checkout origin/main -- README.md 2>/dev/null || true
             git add config/applied_jobs.yml config/discovery_cache.yml README.md
             git commit --amend --no-edit
           done
           git push
 
-  # ── Weekly company discovery ────────────────────────────────────────────────
+  # â”€â”€ Weekly company discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   discover:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -276,42 +239,26 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Resolve prebuilt runner image
         id: runner_image
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
-          image="ghcr.io/${repo}/job-hunt-runner:latest"
+          image="${CORE_IMAGE}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
           if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
             echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Using prebuilt runner image: $image"
+            echo "Using job-hunter core image: $image"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+            echo "::error::Could not pull job-hunter core image: $image"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
           fi
-
-      - name: Set up Python
-        if: steps.runner_image.outputs.available != 'true'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip
-        if: steps.runner_image.outputs.available != 'true'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Python dependencies
-        if: steps.runner_image.outputs.available != 'true'
-        run: pip install -r requirements.txt
 
       - name: Cache SearXNG image
         uses: actions/cache@v5
@@ -375,25 +322,11 @@ jobs:
             -e EXA_API_KEY \
             -e SEARXNG_BASE_URL \
             -e LOG_LEVEL \
+            -e JOB_HUNTER_ROOT=/workspace \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w /workspace \
             "$RUNNER_IMAGE" \
-            bash -lc 'PYTHONPATH=/workspace/scripts python scripts/discovery/discoverer.py'
-
-      - name: Discover new companies natively
-        if: steps.runner_image.outputs.available != 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          SEARXNG_BASE_URL: http://127.0.0.1:8080
-          LOG_LEVEL: INFO
-        run: |
-          cd $GITHUB_WORKSPACE
-          PYTHONPATH=$GITHUB_WORKSPACE/scripts python scripts/discovery/discoverer.py
+            job-hunter discover
 
       - name: Upload logs as artifact
         if: always()

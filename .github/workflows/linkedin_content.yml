@@ -1,4 +1,4 @@
-name: LinkedIn Content
+﻿name: LinkedIn Content
 
 on:
   schedule:
@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 concurrency:
   group: linkedin-content-${{ github.ref }}
@@ -39,16 +40,22 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT || github.token }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
       - name: Sync latest branch
         run: git pull --rebase origin main
 
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
+      - name: Resolve job-hunter core image
+        id: core_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
+        run: |
+          echo "image=$CORE_IMAGE" >> "$GITHUB_OUTPUT"
+          if ! echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin || ! docker pull "$CORE_IMAGE"; then
+            echo "::error::Could not pull job-hunter core image: $CORE_IMAGE"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
+          fi
 
       - name: Generate public-safe raw ideas
         env:
@@ -56,7 +63,20 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           LOG_LEVEL: INFO
-        run: PYTHONPATH=scripts python scripts/linkedin/generate_ideas.py
+          RUNNER_IMAGE: ${{ steps.core_image.outputs.image }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e JOB_HUNTER_ROOT=/workspace \
+            -e ANTHROPIC_API_KEY \
+            -e OPENAI_API_KEY \
+            -e GOOGLE_API_KEY \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            job-hunter linkedin generate-ideas
 
       - name: Commit LinkedIn ideas
         run: |
@@ -83,16 +103,22 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT || github.token }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
       - name: Sync latest branch
         run: git pull --rebase origin main
 
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
+      - name: Resolve job-hunter core image
+        id: core_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
+        run: |
+          echo "image=$CORE_IMAGE" >> "$GITHUB_OUTPUT"
+          if ! echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin || ! docker pull "$CORE_IMAGE"; then
+            echo "::error::Could not pull job-hunter core image: $CORE_IMAGE"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
+          fi
 
       - name: Create draft posts
         env:
@@ -100,7 +126,20 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           LOG_LEVEL: INFO
-        run: PYTHONPATH=scripts python scripts/linkedin/draft_posts.py
+          RUNNER_IMAGE: ${{ steps.core_image.outputs.image }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e JOB_HUNTER_ROOT=/workspace \
+            -e ANTHROPIC_API_KEY \
+            -e OPENAI_API_KEY \
+            -e GOOGLE_API_KEY \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            job-hunter linkedin draft-posts
 
       - name: Commit LinkedIn drafts
         run: |
@@ -127,16 +166,22 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT || github.token }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
       - name: Sync latest branch
         run: git pull --rebase origin main
 
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
+      - name: Resolve job-hunter core image
+        id: core_image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
+        run: |
+          echo "image=$CORE_IMAGE" >> "$GITHUB_OUTPUT"
+          if ! echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin || ! docker pull "$CORE_IMAGE"; then
+            echo "::error::Could not pull job-hunter core image: $CORE_IMAGE"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
+          fi
 
       - name: Start SearXNG
         run: |
@@ -170,7 +215,24 @@ jobs:
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
           SEARXNG_BASE_URL: http://127.0.0.1:8080
           LOG_LEVEL: INFO
-        run: PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
+          RUNNER_IMAGE: ${{ steps.core_image.outputs.image }}
+        run: |
+          docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e JOB_HUNTER_ROOT=/workspace \
+            -e ANTHROPIC_API_KEY \
+            -e OPENAI_API_KEY \
+            -e GOOGLE_API_KEY \
+            -e BRAVE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e EXA_API_KEY \
+            -e SEARXNG_BASE_URL \
+            -e LOG_LEVEL \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$RUNNER_IMAGE" \
+            job-hunter linkedin discover-engagement
 
       - name: Commit LinkedIn discovery
         run: |

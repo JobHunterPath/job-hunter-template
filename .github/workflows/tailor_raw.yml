@@ -1,6 +1,6 @@
-name: Tailor Raw JD
+﻿name: Tailor Raw JD
 
-# Manual-only — triggered from the GitHub Actions UI.
+# Manual-only â€” triggered from the GitHub Actions UI.
 # Paste a full job description into the JD field.
 # Title and Company are optional; if omitted the LLM extracts them from the text.
 # The pipeline scores the JD, tailors the resume, generates a cover letter,
@@ -14,17 +14,17 @@ on:
         required: true
         type: string
       title:
-        description: 'Job title override (optional — inferred by LLM if blank)'
+        description: 'Job title override (optional â€” inferred by LLM if blank)'
         required: false
         default: ''
         type: string
       company:
-        description: 'Company name override (optional — inferred by LLM if blank)'
+        description: 'Company name override (optional â€” inferred by LLM if blank)'
         required: false
         default: ''
         type: string
       skip_score:
-        description: 'Skip scoring threshold — tailor regardless of fit score'
+        description: 'Skip scoring threshold â€” tailor regardless of fit score'
         required: false
         default: false
         type: boolean
@@ -52,66 +52,26 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || github.token }}
 
       - name: Resolve prebuilt runner image
         id: runner_image
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CORE_IMAGE_PAT || github.token }}
+          CORE_IMAGE: ${{ vars.JOB_HUNTER_CORE_IMAGE || 'ghcr.io/job-network-projects/job-hunter-core:latest' }}
         run: |
-          repo="${GITHUB_REPOSITORY,,}"
-          image="ghcr.io/${repo}/job-hunt-runner:latest"
+          image="${CORE_IMAGE}"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
           if echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin && docker pull "$image"; then
             echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Using prebuilt runner image: $image"
+            echo "Using job-hunter core image: $image"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Prebuilt runner image is not available yet. Falling back to native dependency install."
+            echo "::error::Could not pull job-hunter core image: $image"
+            echo "::error::Grant this repository package access or set CORE_IMAGE_PAT with read:packages."
+            exit 1
           fi
-
-      - name: Set up Python
-        if: steps.runner_image.outputs.available != 'true'
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip
-        if: steps.runner_image.outputs.available != 'true'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Python dependencies
-        if: steps.runner_image.outputs.available != 'true'
-        run: pip install -r requirements.txt
-
-      - name: Cache Playwright browsers
-        if: steps.runner_image.outputs.available != 'true'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Playwright browser
-        if: steps.runner_image.outputs.available != 'true'
-        run: playwright install chromium --with-deps
-
-      - name: Install LaTeX
-        if: steps.runner_image.outputs.available != 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            texlive-latex-base \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-pictures \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            lmodern
 
       - name: Build flags
         id: flags
@@ -154,38 +114,16 @@ jobs:
             -e RAW_COMPANY \
             -e FLAGS \
             -e LOG_LEVEL \
+            -e JOB_HUNTER_ROOT=/workspace \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w /workspace \
             "$RUNNER_IMAGE" \
             bash -lc '
-              args=(--mode tailor-raw --jd -)
+              args=(tailor-raw --jd -)
               [ -n "$RAW_TITLE" ] && args+=(--title "$RAW_TITLE")
               [ -n "$RAW_COMPANY" ] && args+=(--company "$RAW_COMPANY")
-              printf "%s" "$RAW_JD" | PYTHONPATH=/workspace/scripts python scripts/pipeline/orchestrator.py "${args[@]}" $FLAGS
+              printf "%s" "$RAW_JD" | job-hunter "${args[@]}" $FLAGS
             '
-
-      - name: Run tailor-raw pipeline natively
-        if: steps.runner_image.outputs.available != 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          SEARXNG_BASE_URL: http://127.0.0.1:8080
-          RAW_JD: ${{ github.event.inputs.jd }}
-          RAW_TITLE: ${{ github.event.inputs.title }}
-          RAW_COMPANY: ${{ github.event.inputs.company }}
-          LOG_LEVEL: INFO
-        run: |
-          args=(--mode tailor-raw --jd -)
-          [ -n "$RAW_TITLE" ] && args+=(--title "$RAW_TITLE")
-          [ -n "$RAW_COMPANY" ] && args+=(--company "$RAW_COMPANY")
-          printf "%s" "$RAW_JD" | \
-            PYTHONPATH=$GITHUB_WORKSPACE/scripts \
-            python scripts/pipeline/orchestrator.py "${args[@]}" \
-              ${{ steps.flags.outputs.flags }}
 
       - name: Upload logs as artifact
         if: always()

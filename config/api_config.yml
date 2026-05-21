@@ -3,7 +3,7 @@
 # your local keyring. Do not commit API keys.
 
 llm:
-  # The matching Python SDK must be installed from requirements.txt.
+  # The maintained core image includes the supported provider SDKs.
   default_provider: anthropic
   providers:
     validation: anthropic

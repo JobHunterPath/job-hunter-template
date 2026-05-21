@@ -18,9 +18,9 @@ It only creates private review queues and draft text.
 ## Local Commands
 
 ```bash
-PYTHONPATH=scripts python scripts/linkedin/generate_ideas.py
-PYTHONPATH=scripts python scripts/linkedin/draft_posts.py
-PYTHONPATH=scripts python scripts/linkedin/discover_engagement.py
+docker run --rm -it -v "$PWD:/workspace" -w /workspace \
+  ghcr.io/abdulrbasit/abdul.basit_resume/job-hunter-core:latest \
+  job-hunter linkedin all
 ```
 
 All generated content requires human review before use.
