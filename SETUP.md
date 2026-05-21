@@ -78,13 +78,17 @@ The workflows pull this maintained image:
 ghcr.io/job-network-projects/job-hunter-core:latest
 ```
 
-For GitHub Actions to pull it, use one of these options:
+Add the shared read-only token provided by the maintainer as a repository secret:
 
-- Preferred: the maintainer grants your repository package access in GHCR.
-- Alternative: add a `CORE_IMAGE_PAT` repository secret with package read access.
+**Settings → Secrets and variables → Actions → New repository secret**
 
-If access is missing, the workflow fails early with an image-pull error instead
-of trying to install code locally.
+```
+Name:  CORE_IMAGE_PAT
+Value: <token from maintainer>
+```
+
+If the secret is missing or invalid, the workflow fails early with an image-pull
+error.
 
 You can override the image with a repository variable:
 
