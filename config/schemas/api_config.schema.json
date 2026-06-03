@@ -133,6 +133,52 @@
             "arbeitnow": { "type": "object" },
             "arbeitsagentur": { "type": "object" },
             "himalayas": { "type": "object" },
+            "remotive": {
+              "type": "object",
+              "description": "Remotive free remote jobs API source.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable or disable the Remotive source.",
+                  "default": true
+                },
+                "max_pages_per_query": {
+                  "type": "integer",
+                  "description": "Maximum pages to fetch per title query.",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "timeout_seconds": {
+                  "type": "integer",
+                  "description": "HTTP request timeout in seconds.",
+                  "minimum": 1,
+                  "default": 15
+                }
+              }
+            },
+            "the_muse": {
+              "type": "object",
+              "description": "The Muse free jobs API source.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable or disable the The Muse source.",
+                  "default": true
+                },
+                "max_pages_per_query": {
+                  "type": "integer",
+                  "description": "Maximum pages to fetch per title query.",
+                  "minimum": 1,
+                  "default": 2
+                },
+                "timeout_seconds": {
+                  "type": "integer",
+                  "description": "HTTP request timeout in seconds.",
+                  "minimum": 1,
+                  "default": 15
+                }
+              }
+            },
             "jsearch": { "type": "object" },
             "adzuna": { "type": "object" },
             "reed": { "type": "object" },
