@@ -1,5 +1,7 @@
 # Job Hunt Automation Template
 
+> **This repository is archived.** Development has moved to [abdulrbasit/job-hunter](https://github.com/abdulrbasit/job-hunter).
+
 Private workspace for your automated job search. GitHub Actions finds jobs, scores fit, tailors resumes and cover letters, compiles PDFs, and commits the results back to this repo.
 
 ## Start Here
